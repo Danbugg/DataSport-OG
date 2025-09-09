@@ -37,7 +37,7 @@ export default function LoginScreen({ navigation }) {
       if (response.ok) {
         const usuario = data.usuario;
 
-        Alert.alert("Bienvenido", `Has iniciado sesión como ${usuario.email}`);
+        Alert.alert("Bienvenido", `Has iniciado sesión como ${usuario.nombre_usuario}`);
         navigation.replace("HomeScreen", { userId: usuario.id_usuario });
       } else {
         Alert.alert("Error", data.error || "Credenciales inválidas");

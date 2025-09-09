@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "773066586874",
+    "project_id": "datasport1730",
+    "storage_bucket": "datasport1730.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:773066586874:android:ae09d6689e089acce7e743",
+        "android_client_info": {
+          "package_name": "com.datasport.cursoapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPHeZNoNnW2Zl7erbG6oxEX9q-SFBNGMI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

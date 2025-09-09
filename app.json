@@ -16,12 +16,22 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.datasport.cursoapp",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true
     },
+    "plugins": [
+      [
+        "expo-firebase-core",
+        {
+          "googleServicesFile": "./google-services.json"
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }

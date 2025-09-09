@@ -17,7 +17,7 @@ export default function HomeScreen({ navigation, route }) {
 
           <TouchableOpacity 
             style={styles.button}
-            onPress={() => navigation.navigate("MatchesScreen")}
+            onPress={() => navigation.navigate("EstadisticaScreen")}
           >
             <Text style={styles.buttonText}>Ver Partidos</Text>
           </TouchableOpacity>
