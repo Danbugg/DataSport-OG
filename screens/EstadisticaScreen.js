@@ -47,7 +47,7 @@ export default function EstadisticaScreen({ navigation }) {
     if (item.match_status === "Finished") {
       return "✅ Partido terminado";
     }
-    return `⏱ ${item.match_status}’`;
+    return `⏱ ${item.match_status}'`;
   };
 
   if (loading) {
