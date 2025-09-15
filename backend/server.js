@@ -28,6 +28,9 @@ app.get("/", (req, res) => {
   res.json({ message: "Servidor funcionando 🚀" });
 });
 
+// -----------------------
+// Registro y login
+// -----------------------
 app.post("/register", async (req, res) => {
   try {
     const { nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena } = req.body;
@@ -85,9 +88,11 @@ app.post("/login", async (req, res) => {
   }
 });
 
+// -----------------------
+// Perfil de usuario
+// -----------------------
 app.get("/profile/:userId", async (req, res) => {
   const { userId } = req.params;
-  console.log("📌 GET /profile/:userId =", userId);
 
   if (!userId || isNaN(userId)) {
     return res.status(400).json({ error: "ID de usuario inválido" });
@@ -121,8 +126,6 @@ app.put("/profile/:userId", async (req, res) => {
   const { userId } = req.params;
   const { descripcion, foto_perfil } = req.body;
 
-  console.log("📌 PUT /profile/:userId =", userId);
-
   if (!userId || isNaN(userId)) {
     return res.status(400).json({ error: "ID de usuario inválido" });
   }
@@ -153,7 +156,69 @@ app.put("/profile/:userId", async (req, res) => {
   }
 });
 
+// -----------------------
+// ENDPOINT DE BÚSQUEDA
+// -----------------------
 
+// Para probar solo ligas
+app.get("/buscar-test", async (req, res) => {
+  const termino = req.query.q || "";
+  const session = driver.session();
+
+  try {
+    const result = await session.run(
+      `
+      MATCH (l:Liga)
+      WHERE toLower(l.nombre) CONTAINS toLower($termino)
+      RETURN l
+      `,
+      { termino }
+    );
+
+    const records = result.records.map(r => r.get('l').properties);
+    res.json(records);
+  } catch (error) {
+    console.error("❌ Error en /buscar-test:", error);
+    res.status(500).json({ error: "Error en búsqueda de prueba" });
+  } finally {
+    await session.close();
+  }
+});
+
+// Búsqueda completa ligas, equipos y jugadores
+app.get("/buscar", async (req, res) => {
+  const termino = req.query.q || "";
+  const session = driver.session();
+
+  try {
+    const result = await session.run(
+      `
+      MATCH (l:Liga)
+      WHERE toLower(l.nombre) CONTAINS toLower($termino)
+      WITH collect(l {.*, elementId: elementId(l)}) AS ligas
+
+      OPTIONAL MATCH (e:Equipo)
+      WHERE toLower(e.nombre) CONTAINS toLower($termino)
+      WITH ligas, collect(e {.*, elementId: elementId(e)}) AS equipos
+
+      OPTIONAL MATCH (j:Jugador)
+      WHERE toLower(j.nombre) CONTAINS toLower($termino)
+      RETURN ligas, equipos, collect(j {.*, elementId: elementId(j)}) AS jugadores
+      `,
+      { termino }
+    );
+
+    const records = result.records[0]?.toObject() || { ligas: [], equipos: [], jugadores: [] };
+    res.json(records);
+  } catch (error) {
+    console.error("❌ Error en /buscar:", error);
+    res.status(500).json({ error: "Error en la búsqueda" });
+  } finally {
+    await session.close();
+  }
+});
+
+// -----------------------
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);
-});
+});  

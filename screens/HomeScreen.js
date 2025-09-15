@@ -15,9 +15,17 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={styles.title}>🏟️ Bienvenido</Text>
           <Text style={styles.subtitle}>Tu espacio para el deporte en tiempo real</Text>
 
+          {/* Botón para ir al buscador */}
           <TouchableOpacity 
             style={styles.button}
-            onPress={() => navigation.navigate("EstadisticaScreen")}
+            onPress={() => navigation.navigate("BuscadorScreen", { userId })}
+          >
+            <Text style={styles.buttonText}>Buscar Ligas, Equipos y Jugadores</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={() => navigation.navigate("MatchesScreen")}
           >
             <Text style={styles.buttonText}>Ver Partidos</Text>
           </TouchableOpacity>
@@ -68,6 +76,6 @@ const styles = StyleSheet.create({
     width: "80%", 
     alignItems: "center" 
   },
-  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold", textAlign: "center" },
   logoutButton: { backgroundColor: "#ff3333" },
 });

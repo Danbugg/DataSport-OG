@@ -8,6 +8,7 @@ import ProfileScreen from "./screens/ProfileScreen";
 import EditProfileScreen from "./screens/EditProfileScreen"; 
 import EstadisticaScreen from "./screens/EstadisticaScreen";
 import PartidoScreen from "./screens/PartidoScreen";
+import BuscadorScreen from "./screens/BuscadorScreen";
 const Stack = createStackNavigator();
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
         <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
         <Stack.Screen name="EstadisticaScreen" component={EstadisticaScreen} />
         <Stack.Screen name="PartidoScreen" component={PartidoScreen} />
+        <Stack.Screen name="BuscadorScreen" component={BuscadorScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
