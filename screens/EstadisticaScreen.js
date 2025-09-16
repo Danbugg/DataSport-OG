@@ -1,4 +1,3 @@
-// screens/EstadisticaScreen.js
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -15,39 +14,41 @@ export default function EstadisticaScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let interval;
-
     const fetchMatches = async () => {
       try {
-        // 👉 Solo partidos en vivo
         const res = await axios.get(
-          `https://apiv3.apifootball.com/?action=get_events&match_live=1&APIkey=49b9840e048e6413f6adcb7ed9547d7b0052f1f4ace2fcd767bdfd6b443cc311`
+          "https://v3.football.api-sports.io/fixtures?live=all",
+          {
+            headers: {
+              "x-apisports-key": "",
+            },
+          }
         );
 
-        console.log("📡 Respuesta AllSportsAPI:", res.data);
-
-        setMatches(res.data || []);
+        setMatches(res.data.response || []);
       } catch (error) {
-        console.error("❌ Error cargando partidos:", error);
+        console.error("Error cargando partidos:", error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchMatches();
-    interval = setInterval(fetchMatches, 30000); // refresca cada 30s
-
-    return () => clearInterval(interval);
   }, []);
 
-  const getMatchTime = (item) => {
-    if (item.match_status === "") {
-      return `Empieza a las ${item.match_time}`;
+  const getMatchTime = (fixture) => {
+    const status = fixture.status;
+    if (status.long === "Not Started") {
+      return `Empieza a las ${new Date(fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    } else if (
+      status.long === "1st Half" ||
+      status.long === "2nd Half" ||
+      status.long === "Halftime"
+    ) {
+      return `${status.elapsed}' • ${status.long}`;
+    } else {
+      return status.long; // Ej: Finished
     }
-    if (item.match_status === "Finished") {
-      return "✅ Partido terminado";
-    }
-    return `⏱ ${item.match_status}'`;
   };
 
   if (loading) {
@@ -70,26 +71,26 @@ export default function EstadisticaScreen({ navigation }) {
   return (
     <FlatList
       data={matches}
-      keyExtractor={(item) => item.match_id.toString()}
+      keyExtractor={(item) => item.fixture.id.toString()}
       contentContainerStyle={styles.list}
       renderItem={({ item }) => (
         <TouchableOpacity
           style={styles.card}
           onPress={() =>
-            navigation.navigate("PartidoScreen", { matchId: item.match_id })
+            navigation.navigate("PartidoScreen", { matchId: item.fixture.id })
           }
         >
           <Text style={styles.league}>
-            {item.league_name} - {item.country_name}
+            {item.league.name} - {item.league.country}
           </Text>
           <View style={styles.row}>
-            <Text style={styles.team}>{item.match_hometeam_name}</Text>
+            <Text style={styles.team}>{item.teams.home.name}</Text>
             <Text style={styles.score}>
-              {item.match_hometeam_score} - {item.match_awayteam_score}
+              {item.goals.home ?? 0} - {item.goals.away ?? 0}
             </Text>
-            <Text style={styles.team}>{item.match_awayteam_name}</Text>
+            <Text style={styles.team}>{item.teams.away.name}</Text>
           </View>
-          <Text style={styles.time}>{getMatchTime(item)}</Text>
+          <Text style={styles.time}>⏱ {getMatchTime(item.fixture)}</Text>
         </TouchableOpacity>
       )}
     />
