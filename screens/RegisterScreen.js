@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from "react-native";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function RegisterScreen({ navigation }) {
   const [nombre, setNombre] = useState("");
@@ -20,8 +21,11 @@ export default function RegisterScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+
   const showDatePicker = () => setDatePickerVisibility(true);
   const hideDatePicker = () => setDatePickerVisibility(false);
   const handleConfirm = (date) => {
@@ -30,9 +34,60 @@ export default function RegisterScreen({ navigation }) {
     hideDatePicker();
   };
 
+  // Validación de contraseña
+  const validatePassword = (password) => {
+    const regex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&._-])[A-Za-z\d@$!%*?&._-]{8,}$/;
+    return regex.test(password);
+  };
+
+  const handlePasswordChange = (text) => {
+    setPassword(text);
+    if (!validatePassword(text)) {
+      setPasswordError(
+        "Debe tener: mínimo 8 caracteres, una mayúscula, una minúscula, un número y un símbolo."
+      );
+    } else {
+      setPasswordError("");
+    }
+  };
+
   const handleRegister = async () => {
-    if (!nombre || !apellido || !fechaNacimiento || !email || !usuario || !password) {
-      Alert.alert("Error", "Por favor completa todos los campos");
+    // Validaciones personalizadas
+    if (!nombre.trim()) {
+      Alert.alert("Error", "Por favor ingresa tu nombre");
+      return;
+    }
+    if (!apellido.trim()) {
+      Alert.alert("Error", "Por favor ingresa tu apellido");
+      return;
+    }
+    if (!fechaNacimiento) {
+      Alert.alert("Error", "Por favor selecciona tu fecha de nacimiento");
+      return;
+    }
+    if (!email.trim()) {
+      Alert.alert("Error", "Por favor ingresa tu correo electrónico");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Error", "Por favor ingresa un correo electrónico válido");
+      return;
+    }
+    if (!usuario.trim()) {
+      Alert.alert("Error", "Por favor elige un nombre de usuario");
+      return;
+    }
+    if (!password.trim()) {
+      Alert.alert("Error", "Por favor ingresa una contraseña");
+      return;
+    }
+    if (!validatePassword(password)) {
+      Alert.alert(
+        "Contraseña insegura",
+        "La contraseña debe tener:\n• Al menos 8 caracteres\n• Una mayúscula\n• Una minúscula\n• Un número\n• Un símbolo especial"
+      );
       return;
     }
 
@@ -65,7 +120,10 @@ export default function RegisterScreen({ navigation }) {
           { text: "OK", onPress: () => navigation.navigate("LoginScreen") },
         ]);
       } else {
-        Alert.alert("Error de registro", data.error || "Ocurrió un error en el servidor.");
+        Alert.alert(
+          "Error de registro",
+          data.error || "Ocurrió un error en el servidor."
+        );
       }
     } catch (error) {
       console.error("Error de conexión:", error);
@@ -95,7 +153,10 @@ export default function RegisterScreen({ navigation }) {
               <Text style={styles.title}>Nueva cuenta</Text>
               <Text style={styles.subtitle}>
                 ¿Ya tienes cuenta?{" "}
-                <Text style={styles.link} onPress={() => navigation.navigate("LoginScreen")}>
+                <Text
+                  style={styles.link}
+                  onPress={() => navigation.navigate("LoginScreen")}
+                >
                   Inicia sesión
                 </Text>
               </Text>
@@ -144,14 +205,31 @@ export default function RegisterScreen({ navigation }) {
                 onChangeText={setUsuario}
                 autoCapitalize="none"
               />
-              <TextInput
-                style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#555555ff"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
+
+              {/* Campo de contraseña con ojito */}
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]}
+                  placeholder="Password"
+                  placeholderTextColor="#555555ff"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={handlePasswordChange}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={22}
+                    color="#333"
+                  />
+                </TouchableOpacity>
+              </View>
+              {passwordError ? (
+                <Text style={styles.errorText}>{passwordError}</Text>
+              ) : null}
 
               <TouchableOpacity
                 style={[styles.button, loading && { opacity: 0.7 }]}
@@ -173,15 +251,65 @@ export default function RegisterScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, resizeMode: "cover", justifyContent: "center", alignItems: "center" },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", width: "100%", justifyContent: "center", alignItems: "center" },
-  formContainer: { backgroundColor: "#9ac4ff7c", marginHorizontal: 20, borderRadius: 20, padding: 25, width: "90%", alignItems: "center" },
+  background: {
+    flex: 1,
+    resizeMode: "cover",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  formContainer: {
+    backgroundColor: "#9ac4ff7c",
+    marginHorizontal: 20,
+    borderRadius: 20,
+    padding: 25,
+    width: "90%",
+    alignItems: "center",
+  },
   logo: { fontSize: 32, fontWeight: "bold", color: "#000" },
   sport: { color: "#0033ffff" },
   title: { fontSize: 26, fontWeight: "bold", color: "#fff", marginTop: 5, marginBottom: 5 },
   subtitle: { fontSize: 14, color: "#fff", marginBottom: 20 },
   link: { color: "#fff", fontWeight: "bold" },
-  input: { width: "100%", height: 50, borderColor: "#afcfffff", borderWidth: 1, borderRadius: 25, marginBottom: 15, paddingHorizontal: 20, justifyContent: "center", backgroundColor: "#ffffff88" },
-  button: { width: "100%", backgroundColor: "#2b8aff83", padding: 15, borderRadius: 25, alignItems: "center", marginTop: 10 },
+  input: {
+    width: "100%",
+    height: 50,
+    borderColor: "#afcfffff",
+    borderWidth: 1,
+    borderRadius: 25,
+    marginBottom: 15,
+    paddingHorizontal: 20,
+    justifyContent: "center",
+    backgroundColor: "#ffffff88",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    borderColor: "#afcfffff",
+    borderWidth: 1,
+    borderRadius: 25,
+    marginBottom: 15,
+    backgroundColor: "#ffffff88",
+    paddingRight: 10,
+  },
+  eyeButton: {
+    padding: 8,
+  },
+  button: {
+    width: "100%",
+    backgroundColor: "#2b8aff83",
+    padding: 15,
+    borderRadius: 25,
+    alignItems: "center",
+    marginTop: 10,
+  },
   buttonText: { color: "#ffffffff", fontSize: 18, fontWeight: "bold" },
+  errorText: { color: "red", fontSize: 12, marginBottom: 10, textAlign: "center" },
 });

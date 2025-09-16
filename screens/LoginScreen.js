@@ -11,11 +11,13 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -36,7 +38,6 @@ export default function LoginScreen({ navigation }) {
 
       if (response.ok) {
         const usuario = data.usuario;
-
         Alert.alert("Bienvenido", `Has iniciado sesión como ${usuario.nombre_usuario}`);
         navigation.replace("HomeScreen", { userId: usuario.id_usuario });
       } else {
@@ -77,13 +78,27 @@ export default function LoginScreen({ navigation }) {
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
+
+              {/* Campo contraseña con ojo */}
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  placeholder="Contraseña"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={showPassword ? "eye-off" : "eye"}
+                    size={22}
+                    color="#333"
+                  />
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 style={[styles.button, loading && { opacity: 0.7 }]}
@@ -142,6 +157,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     backgroundColor: "#ffffffa8",
     color: "#000",
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 15,
+    backgroundColor: "#ffffffa8",
+    borderRadius: 25,
+  },
+  eyeButton: {
+    paddingHorizontal: 12,
   },
   button: {
     width: "100%",

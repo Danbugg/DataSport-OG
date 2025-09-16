@@ -39,7 +39,10 @@ export default function EstadisticaScreen({ navigation }) {
   const getMatchTime = (fixture) => {
     const status = fixture.status;
     if (status.long === "Not Started") {
-      return `Empieza a las ${new Date(fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      return `Empieza a las ${new Date(fixture.date).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
     } else if (
       status.long === "1st Half" ||
       status.long === "2nd Half" ||
@@ -56,6 +59,14 @@ export default function EstadisticaScreen({ navigation }) {
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#00ffcc" />
         <Text style={styles.loadingText}>Cargando partidos...</Text>
+
+        {/* Botón volver */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate("HomeScreen")}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -64,36 +75,54 @@ export default function EstadisticaScreen({ navigation }) {
     return (
       <View style={styles.center}>
         <Text style={styles.emptyText}>📭 No hay partidos en vivo</Text>
+
+        {/* Botón volver */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate("HomeScreen")}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <FlatList
-      data={matches}
-      keyExtractor={(item) => item.fixture.id.toString()}
-      contentContainerStyle={styles.list}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() =>
-            navigation.navigate("PartidoScreen", { matchId: item.fixture.id })
-          }
-        >
-          <Text style={styles.league}>
-            {item.league.name} - {item.league.country}
-          </Text>
-          <View style={styles.row}>
-            <Text style={styles.team}>{item.teams.home.name}</Text>
-            <Text style={styles.score}>
-              {item.goals.home ?? 0} - {item.goals.away ?? 0}
+    <View style={{ flex: 1 }}>
+      {/* Botón volver */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.navigate("HomeScreen")}
+      >
+        <Text style={styles.backText}>Volver</Text>
+      </TouchableOpacity>
+
+      <FlatList
+        data={matches}
+        keyExtractor={(item) => item.fixture.id.toString()}
+        contentContainerStyle={styles.list}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() =>
+              navigation.navigate("PartidoScreen", { matchId: item.fixture.id })
+            }
+          >
+            <Text style={styles.league}>
+              {item.league.name} - {item.league.country}
             </Text>
-            <Text style={styles.team}>{item.teams.away.name}</Text>
-          </View>
-          <Text style={styles.time}>⏱ {getMatchTime(item.fixture)}</Text>
-        </TouchableOpacity>
-      )}
-    />
+            <View style={styles.row}>
+              <Text style={styles.team}>{item.teams.home.name}</Text>
+              <Text style={styles.score}>
+                {item.goals.home ?? 0} - {item.goals.away ?? 0}
+              </Text>
+              <Text style={styles.team}>{item.teams.away.name}</Text>
+            </View>
+            <Text style={styles.time}>⏱ {getMatchTime(item.fixture)}</Text>
+          </TouchableOpacity>
+        )}
+      />
+    </View>
   );
 }
 
@@ -152,5 +181,19 @@ const styles = StyleSheet.create({
     color: "#aaa",
     fontSize: 13,
     textAlign: "center",
+  },
+  backButton: {
+    position: "absolute",
+    top: 40,
+    left: 15,
+    backgroundColor: "#800000", // vinotinto
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  backText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });

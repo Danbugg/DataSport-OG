@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity, Image } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+  Image,
+} from "react-native";
 
 export default function BuscadorScreen({ navigation, route }) {
   const { userId } = route.params || {};
   const [termino, setTermino] = useState("");
-  const [resultados, setResultados] = useState({ ligas: [], equipos: [], jugadores: [] });
+  const [resultados, setResultados] = useState({
+    ligas: [],
+    equipos: [],
+    jugadores: [],
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -23,7 +36,9 @@ export default function BuscadorScreen({ navigation, route }) {
   const buscar = async (q) => {
     setLoading(true);
     try {
-      const response = await fetch(`http://10.0.2.2:3000/buscar?q=${encodeURIComponent(q)}`);
+      const response = await fetch(
+        `http://10.0.2.2:3000/buscar?q=${encodeURIComponent(q)}`
+      );
       const data = await response.json();
       setResultados(data);
     } catch (error) {
@@ -33,14 +48,12 @@ export default function BuscadorScreen({ navigation, route }) {
     }
   };
 
-  // Render general para ligas y equipos (sin imagen)
   const renderItem = ({ item }) => (
     <View style={styles.item}>
       <Text style={styles.itemText}>{item.nombre}</Text>
     </View>
   );
 
-  // Render específico para jugadores (con imagen si existe)
   const renderJugador = ({ item }) => (
     <View style={styles.itemJugador}>
       {item.foto ? (
@@ -54,12 +67,12 @@ export default function BuscadorScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Botón de retroceso */}
+      {/* Botón vinotinto en la esquina superior izquierda */}
       <TouchableOpacity
         style={styles.backButton}
         onPress={() => navigation.navigate("HomeScreen", { userId })}
       >
-        <Text style={styles.backText}>←</Text>
+        <Text style={styles.backText}>Volver</Text>
       </TouchableOpacity>
 
       <TextInput
@@ -115,12 +128,13 @@ const styles = StyleSheet.create({
     top: 40,
     left: 16,
     zIndex: 10,
-    padding: 4,
-    backgroundColor: "#800020",
-    borderRadius: 6
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#800020", // Vinotinto
+    borderRadius: 20      ,
   },
   backText: {
-    fontSize: 24,
+    fontSize: 16,
     color: "#fff",
     fontWeight: "bold",
   },
@@ -128,7 +142,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderColor: "#fff",
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 20,
     paddingHorizontal: 10,
     marginBottom: 16,
     marginTop: 70,
@@ -138,8 +152,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "bold", marginBottom: 8, color: "#fff" },
   item: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#555" },
   itemText: { color: "#fff" },
-
-  // Estilos para jugadores con imagen
   itemJugador: {
     flexDirection: "row",
     alignItems: "center",

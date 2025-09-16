@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  ActivityIndicator,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from "react-native";
 import axios from "axios";
 
-export default function PartidoScreen({ route }) {
+export default function PartidoScreen({ route, navigation }) {
   const { matchId } = route.params;
   const [match, setMatch] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -32,7 +39,10 @@ export default function PartidoScreen({ route }) {
   const getMatchTime = (fixture) => {
     const status = fixture.status;
     if (status.long === "Not Started") {
-      return `Empieza a las ${new Date(fixture.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      return `Empieza a las ${new Date(fixture.date).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
     } else if (
       status.long === "1st Half" ||
       status.long === "2nd Half" ||
@@ -49,6 +59,14 @@ export default function PartidoScreen({ route }) {
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#00ffcc" />
         <Text style={styles.loadingText}>Cargando partido...</Text>
+
+        {/* Botón volver */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate("HomeScreen")}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -57,28 +75,46 @@ export default function PartidoScreen({ route }) {
     return (
       <View style={styles.center}>
         <Text style={styles.emptyText}>❌ No se encontró el partido</Text>
+
+        {/* Botón volver */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate("HomeScreen")}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.league}>
-        {match.league.name} - {match.league.country}
-      </Text>
+    <View style={{ flex: 1 }}>
+      {/* Botón volver */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.navigate("HomeScreen")}
+      >
+        <Text style={styles.backText}>Volver</Text>
+      </TouchableOpacity>
 
-      <View style={styles.row}>
-        <Text style={styles.team}>{match.teams.home.name}</Text>
-        <Text style={styles.score}>
-          {match.goals.home ?? 0} - {match.goals.away ?? 0}
+      <ScrollView style={styles.container}>
+        <Text style={styles.league}>
+          {match.league.name} - {match.league.country}
         </Text>
-        <Text style={styles.team}>{match.teams.away.name}</Text>
-      </View>
 
-      <Text style={styles.time}>⏱ {getMatchTime(match.fixture)}</Text>
+        <View style={styles.row}>
+          <Text style={styles.team}>{match.teams.home.name}</Text>
+          <Text style={styles.score}>
+            {match.goals.home ?? 0} - {match.goals.away ?? 0}
+          </Text>
+          <Text style={styles.team}>{match.teams.away.name}</Text>
+        </View>
 
-      {/* Puedes agregar aquí más estadísticas, como posesión, tiros, tarjetas, etc. */}
-    </ScrollView>
+        <Text style={styles.time}>⏱ {getMatchTime(match.fixture)}</Text>
+
+        {/* Aquí puedes agregar más estadísticas */}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -131,5 +167,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginBottom: 15,
+  },
+  backButton: {
+    position: "absolute",
+    top: 40,
+    left: 15,
+    backgroundColor: "#800000", // vinotinto
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  backText: {
+    color: "#fff",
+    fontWeight: "bold",
   },
 });
