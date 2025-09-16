@@ -20,7 +20,6 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
     "expo": "53.0.22",
-    "expo-firebase-core": "^6.0.0",
     "expo-image-picker": "~16.1.4",
     "expo-status-bar": "~2.2.3",
     "moment": "^2.30.1",
