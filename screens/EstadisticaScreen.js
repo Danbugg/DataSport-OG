@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
+  SafeAreaView,
 } from "react-native";
 import axios from "axios";
 
@@ -50,13 +51,13 @@ export default function EstadisticaScreen({ navigation }) {
     ) {
       return `${status.elapsed}' • ${status.long}`;
     } else {
-      return status.long; // Ej: Finished
+      return status.long;
     }
   };
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <ActivityIndicator size="large" color="#00ffcc" />
         <Text style={styles.loadingText}>Cargando partidos...</Text>
 
@@ -67,13 +68,13 @@ export default function EstadisticaScreen({ navigation }) {
         >
           <Text style={styles.backText}>Volver</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!matches || matches.length === 0) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <Text style={styles.emptyText}>📭 No hay partidos en vivo</Text>
 
         {/* Botón volver */}
@@ -83,12 +84,12 @@ export default function EstadisticaScreen({ navigation }) {
         >
           <Text style={styles.backText}>Volver</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={styles.container}>
       {/* Botón volver */}
       <TouchableOpacity
         style={styles.backButton}
@@ -97,6 +98,7 @@ export default function EstadisticaScreen({ navigation }) {
         <Text style={styles.backText}>Volver</Text>
       </TouchableOpacity>
 
+      {/* Lista de partidos */}
       <FlatList
         data={matches}
         keyExtractor={(item) => item.fixture.id.toString()}
@@ -122,11 +124,15 @@ export default function EstadisticaScreen({ navigation }) {
           </TouchableOpacity>
         )}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
   center: {
     flex: 1,
     backgroundColor: "#000",
@@ -142,6 +148,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   list: {
+    flexGrow: 1,
     padding: 10,
     backgroundColor: "#000",
   },
@@ -183,14 +190,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   backButton: {
-    position: "absolute",
-    top: 40,
-    left: 15,
+    alignSelf: "flex-start",
+    margin: 10,
     backgroundColor: "#800000", // vinotinto
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
-    zIndex: 10,
   },
   backText: {
     color: "#fff",

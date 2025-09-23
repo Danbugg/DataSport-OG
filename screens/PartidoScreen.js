@@ -50,7 +50,7 @@ export default function PartidoScreen({ route, navigation }) {
     ) {
       return `${status.elapsed}' • ${status.long}`;
     } else {
-      return status.long; // Finished
+      return status.long;
     }
   };
 
@@ -60,10 +60,9 @@ export default function PartidoScreen({ route, navigation }) {
         <ActivityIndicator size="large" color="#00ffcc" />
         <Text style={styles.loadingText}>Cargando partido...</Text>
 
-        {/* Botón volver */}
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.navigate("HomeScreen")}
+          onPress={() => navigation.navigate("EstadisticaScreen")}
         >
           <Text style={styles.backText}>Volver</Text>
         </TouchableOpacity>
@@ -74,9 +73,8 @@ export default function PartidoScreen({ route, navigation }) {
   if (!match) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyText}>❌ No se encontró el partido</Text>
+        <Text style={styles.emptyText}>No se encontró el partido</Text>
 
-        {/* Botón volver */}
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.navigate("HomeScreen")}
@@ -88,16 +86,15 @@ export default function PartidoScreen({ route, navigation }) {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      {/* Botón volver */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.navigate("HomeScreen")}
-      >
-        <Text style={styles.backText}>Volver</Text>
-      </TouchableOpacity>
-
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
       <ScrollView style={styles.container}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate("HomeScreen")}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </TouchableOpacity>
+
         <Text style={styles.league}>
           {match.league.name} - {match.league.country}
         </Text>
@@ -111,8 +108,6 @@ export default function PartidoScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.time}>⏱ {getMatchTime(match.fixture)}</Text>
-
-        {/* Aquí puedes agregar más estadísticas */}
       </ScrollView>
     </View>
   );
@@ -169,14 +164,12 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   backButton: {
-    position: "absolute",
-    top: 40,
-    left: 15,
-    backgroundColor: "#800000", // vinotinto
+    backgroundColor: "#800000",
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
-    zIndex: 10,
+    alignSelf: "flex-start",
+    marginBottom: 15,
   },
   backText: {
     color: "#fff",

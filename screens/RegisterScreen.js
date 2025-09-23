@@ -163,21 +163,21 @@ export default function RegisterScreen({ navigation }) {
 
               <TextInput
                 style={styles.input}
-                placeholder="Nombre"
+                placeholder="Nombre *"
                 placeholderTextColor="#555555ff"
                 value={nombre}
                 onChangeText={setNombre}
               />
               <TextInput
                 style={styles.input}
-                placeholder="Apellido"
+                placeholder="Apellido *"
                 placeholderTextColor="#555555ff"
                 value={apellido}
                 onChangeText={setApellido}
               />
               <TouchableOpacity style={styles.input} onPress={showDatePicker}>
                 <Text style={{ color: fechaNacimiento ? "#000" : "#555" }}>
-                  {fechaNacimiento || "Fecha de nacimiento (YYYY-MM-DD)"}
+                  {fechaNacimiento || "Fecha de nacimiento (AAAA-MM-DD) *"}
                 </Text>
               </TouchableOpacity>
 
@@ -190,7 +190,7 @@ export default function RegisterScreen({ navigation }) {
 
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder="Email *"
                 placeholderTextColor="#555555ff"
                 value={email}
                 onChangeText={setEmail}
@@ -199,7 +199,7 @@ export default function RegisterScreen({ navigation }) {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Nombre de usuario"
+                placeholder="Nombre de usuario *"
                 placeholderTextColor="#555555ff"
                 value={usuario}
                 onChangeText={setUsuario}
@@ -210,7 +210,7 @@ export default function RegisterScreen({ navigation }) {
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]}
-                  placeholder="Password"
+                  placeholder="Password *"
                   placeholderTextColor="#555555ff"
                   secureTextEntry={!showPassword}
                   value={password}

@@ -4,6 +4,7 @@ const bodyParser = require("body-parser");
 const { Pool } = require("pg");
 const neo4j = require("neo4j-driver");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto"); // 👈 Agrega esta importación
 
 const app = express();
 const PORT = 3000;
@@ -88,6 +89,74 @@ app.post("/login", async (req, res) => {
   }
 });
 
+// ----------------------------------------------------
+// RUTAS DE RECUPERACIÓN DE CONTRASEÑA 🔑
+// ----------------------------------------------------
+
+// 1. Ruta para solicitar el token
+app.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: 'Correo no encontrado.' });
+    }
+
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    const resetExpires = new Date(Date.now() + 3600000); // 1 hora
+    await pool.query('UPDATE usuarios SET reset_password_token = $1, reset_password_expires = $2 WHERE id_usuario = $3', [resetToken, resetExpires, user.id_usuario]);
+    
+    // Para probar, enviamos el token en la respuesta. En producción, usa un servicio de SMS/notificación.
+    res.status(200).json({ message: 'Token de recuperación generado.', token: resetToken });
+  } catch (error) {
+    console.error('❌ Error en /forgot-password:', error);
+    res.status(500).json({ error: 'Error en el servidor.' });
+  }
+});
+
+// 2. Ruta para verificar el token
+app.post('/verify-token', async (req, res) => {
+  const { token } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM usuarios WHERE reset_password_token = $1 AND reset_password_expires > NOW()', [token]);
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(400).json({ message: 'Token inválido o expirado.' });
+    }
+    
+    res.status(200).json({ message: 'Token verificado con éxito.' });
+  } catch (error) {
+    console.error('❌ Error en /verify-token:', error);
+    res.status(500).json({ error: 'Error en el servidor.' });
+  }
+});
+
+// 3. Ruta para restablecer la contraseña
+app.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+  try {
+    const result = await pool.query('SELECT * FROM usuarios WHERE reset_password_token = $1 AND reset_password_expires > NOW()', [token]);
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(400).json({ message: 'Token inválido o expirado.' });
+    }
+    
+    // Hashear la nueva contraseña para mayor seguridad
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    await pool.query('UPDATE usuarios SET contrasena = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id_usuario = $2', [hashedPassword, user.id_usuario]);
+
+    res.status(200).json({ message: 'Contraseña restablecida con éxito.' });
+  } catch (error) {
+    console.error('❌ Error en /reset-password:', error);
+    res.status(500).json({ error: 'Error en el servidor.' });
+  }
+});
+
 // -----------------------
 // Perfil de usuario
 // -----------------------
@@ -133,9 +202,9 @@ app.put("/profile/:userId", async (req, res) => {
   try {
     const result = await pool.query(
       `UPDATE usuarios 
-       SET descripcion = $1, foto_perfil = $2 
-       WHERE id_usuario = $3 
-       RETURNING *`,
+        SET descripcion = $1, foto_perfil = $2 
+        WHERE id_usuario = $3 
+        RETURNING *`,
       [descripcion || "", foto_perfil || "", userId]
     );
 
@@ -221,4 +290,4 @@ app.get("/buscar", async (req, res) => {
 // -----------------------
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);
-});  
+});
