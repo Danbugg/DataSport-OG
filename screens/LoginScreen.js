@@ -20,12 +20,10 @@ export default function LoginScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // NUEVOS ESTADOS para el bloqueo
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockoutTime, setLockoutTime] = useState(0);
 
-  // Lógica para cargar el estado del bloqueo desde AsyncStorage al iniciar
   useEffect(() => {
     const checkLockoutStatus = async () => {
       const storedAttempts = await AsyncStorage.getItem("failedAttempts");
@@ -48,7 +46,6 @@ export default function LoginScreen({ navigation }) {
             `Demasiados intentos. Intenta de nuevo en ${Math.ceil(remainingTime / 60000)} minutos.`
           );
         } else {
-          // El tiempo de bloqueo ya expiró, limpiar el almacenamiento
           setIsLocked(false);
           setFailedAttempts(0);
           AsyncStorage.removeItem("failedAttempts");
@@ -59,7 +56,6 @@ export default function LoginScreen({ navigation }) {
     checkLockoutStatus();
   }, []);
 
-  // Temporizador para el bloqueo
   useEffect(() => {
     let timer;
     if (isLocked) {
@@ -81,7 +77,6 @@ export default function LoginScreen({ navigation }) {
   }, [isLocked]);
 
   const handleLogin = async () => {
-    // 1. Verificar si está bloqueado antes de cualquier otra cosa
     if (isLocked) {
       Alert.alert(
         "Cuenta bloqueada",
@@ -107,22 +102,23 @@ export default function LoginScreen({ navigation }) {
       const data = await response.json();
 
       if (response.ok) {
-        // 2. Éxito: Reiniciar los intentos y desbloquear
         setFailedAttempts(0);
         await AsyncStorage.removeItem("failedAttempts");
         await AsyncStorage.removeItem("lockoutTime");
+        
+        // --- LA LÍNEA CRÍTICA: GUARDA EL ID EN ASYNCSTORAGE ---
+        await AsyncStorage.setItem('userId', String(data.usuario.id_usuario));
 
         const usuario = data.usuario;
         Alert.alert("Bienvenido", `Has iniciado sesión como ${usuario.nombre_usuario}`);
-        navigation.replace("HomeScreen", { userId: usuario.id_usuario });
+        navigation.navigate("HomeScreen", { userId: usuario.id_usuario });
       } else {
-        // 3. Fallo: Incrementar los intentos y manejar el bloqueo
         const newAttempts = failedAttempts + 1;
         setFailedAttempts(newAttempts);
         await AsyncStorage.setItem("failedAttempts", newAttempts.toString());
 
         if (newAttempts >= 3) {
-          const lockoutDuration = 2 * 60 * 1000; // 5 minutos en milisegundos
+          const lockoutDuration = 2 * 60 * 1000;
           const lockoutTimestamp = Date.now() + lockoutDuration;
           setIsLocked(true);
           setLockoutTime(2 * 60);
@@ -160,7 +156,6 @@ export default function LoginScreen({ navigation }) {
             }}
           >
             {isLocked ? (
-              // Contenedor de bloqueo
               <View style={styles.lockoutContainer}>
                 <Ionicons name="lock-closed" size={80} color="#ff4040" />
                 <Text style={styles.lockoutTitle}>Cuenta Bloqueada</Text>
@@ -172,7 +167,6 @@ export default function LoginScreen({ navigation }) {
                 </Text>
               </View>
             ) : (
-              // Formulario de login original
               <View style={styles.formContainer}>
                 <Text style={styles.logo}>
                   Data<Text style={styles.sport}>Sport</Text>
@@ -220,7 +214,6 @@ export default function LoginScreen({ navigation }) {
                   )}
                 </TouchableOpacity>
 
-                {/* CAMBIÓ AQUÍ: EL NOMBRE DE LA PANTALLA */}
                 <TouchableOpacity
                   style={styles.forgotPasswordButton}
                   onPress={() => navigation.navigate("OlvidarContraScreen")}
@@ -296,8 +289,6 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   link: { color: "#fff", fontWeight: "bold" },
-
-  // Nuevos estilos para la pantalla de bloqueo
   lockoutContainer: {
     backgroundColor: "#ff40404a",
     marginHorizontal: 20,
@@ -325,7 +316,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginTop: 20,
   },
-  // Nuevo estilo para el botón de recuperar contraseña
   forgotPasswordButton: {
     marginTop: 10,
   },

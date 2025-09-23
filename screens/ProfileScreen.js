@@ -11,6 +11,8 @@ import {
   ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function ProfileScreen({ route, navigation }) {
   const { userId } = route.params || {};
@@ -21,7 +23,10 @@ export default function ProfileScreen({ route, navigation }) {
   const fondoLogin = require("../assets/fondoLogin.jpg");
 
   const fetchProfile = async () => {
-    if (!userId || isNaN(userId)) {
+    // --- LÍNEA MODIFICADA: BUSCA EN ASYNCSTORAGE COMO RESPALDO ---
+    const finalUserId = userId || (await AsyncStorage.getItem("userId"));
+
+    if (!finalUserId || isNaN(finalUserId)) {
       setLoading(false);
       Alert.alert("Error", "ID de usuario inválido. Por favor, inicia sesión de nuevo.");
       return;
@@ -30,7 +35,7 @@ export default function ProfileScreen({ route, navigation }) {
     setLoading(true);
 
     try {
-      const response = await fetch(`http://10.0.2.2:3000/profile/${userId}`);
+      const response = await fetch(`http://10.0.2.2:3000/profile/${finalUserId}`);
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -41,7 +46,6 @@ export default function ProfileScreen({ route, navigation }) {
 
       const data = await response.json();
       setUserProfile({ ...data.user, descripcion: data.user.descripcion || '' });
-
     } catch (error) {
       console.error("Error de conexión:", error);
       Alert.alert("Error", "Error al conectar con el servidor. Revisa tu IP y que el backend esté corriendo.");
@@ -55,6 +59,76 @@ export default function ProfileScreen({ route, navigation }) {
       fetchProfile();
     }, [userId])
   );
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "Eliminar Cuenta",
+      "¿Estás seguro de que quieres eliminar tu cuenta? Esta acción es irreversible y eliminará todos tus datos. Si deseas continuar, presiona 'Eliminar'.",
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            const idToDelete = await AsyncStorage.getItem("userId");
+            if (!idToDelete) {
+              Alert.alert("Error", "No se encontró el ID de usuario para eliminar.");
+              return;
+            }
+            try {
+              const response = await fetch(`http://10.0.2.2:3000/delete-account/${idToDelete}`, {
+                method: "DELETE",
+              });
+
+              if (response.ok) {
+                Alert.alert("¡Hecho!", "Tu cuenta ha sido eliminada con éxito.");
+                await AsyncStorage.clear();
+                navigation.replace('LoginScreen');
+              } else {
+                const errorData = await response.json();
+                Alert.alert("Error", errorData.error || "No se pudo eliminar la cuenta.");
+              }
+            } catch (error) {
+              console.error("Error al eliminar la cuenta:", error);
+              Alert.alert("Error", "No se pudo conectar al servidor.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSettings = () => {
+    Alert.alert(
+      "Opciones",
+      "Selecciona una opción",
+      [
+        {
+          text: "Editar Perfil",
+          onPress: () => navigation.navigate('EditProfileScreen', { userId, userProfile }),
+        },
+        {
+          text: "Cerrar Sesión",
+          onPress: async () => {
+            await AsyncStorage.clear();
+            navigation.replace('LoginScreen');
+          }
+        },
+        {
+          text: "Eliminar Cuenta",
+          onPress: handleDeleteAccount,
+          style: "destructive",
+        },
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+      ]
+    );
+  };
 
   if (loading) {
     return (
@@ -88,18 +162,11 @@ export default function ProfileScreen({ route, navigation }) {
                 <Text style={styles.userStatus}>{userProfile.descripcion || 'Sin descripción'}</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={() => console.log('Configuración')}>
-              <Text style={styles.settingsIcon}>⚙️</Text>
+            <TouchableOpacity onPress={handleSettings}>
+              <Ionicons name="settings-outline" size={28} color="#fff" />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity 
-            style={styles.editButton}
-            onPress={() => navigation.navigate('EditProfileScreen', { userId, userProfile })}
-          >
-            <Text style={styles.editButtonText}>Editar perfil</Text>
-          </TouchableOpacity>
-          
           <View style={styles.profileDetailsContainer}>
             <Text style={styles.detailText}>
               <Text style={styles.detailLabel}>Nombre: </Text>
@@ -110,14 +177,14 @@ export default function ProfileScreen({ route, navigation }) {
               {userProfile.email}
             </Text>
           </View>
-          
+
           <View style={styles.publicationsContainer}>
             <Text style={styles.publicationsPlaceholder}>Aquí irán las publicaciones</Text>
           </View>
 
           <TouchableOpacity
             style={[styles.button, styles.logoutButton]}
-            onPress={() => navigation.goBack()} 
+            onPress={() => navigation.goBack()}
           >
             <Text style={styles.buttonText}>Volver</Text>
           </TouchableOpacity>
@@ -131,7 +198,7 @@ const styles = StyleSheet.create({
   background: { flex: 1, justifyContent: "flex-start", alignItems: "center" },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)", 
+    backgroundColor: "rgba(0,0,0,0.85)",
     width: "100%",
     padding: 20,
   },
@@ -140,6 +207,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 20,
+    marginTop: 40,
   },
   profileInfo: {
     flexDirection: 'row',
@@ -223,5 +291,9 @@ const styles = StyleSheet.create({
   },
   errorContainer: {
     flex: 1, justifyContent: "center", alignItems: "center"
+  },
+  deleteOption: {
+    color: 'red',
+    fontWeight: 'bold',
   }
 });

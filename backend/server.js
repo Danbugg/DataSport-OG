@@ -4,7 +4,7 @@ const bodyParser = require("body-parser");
 const { Pool } = require("pg");
 const neo4j = require("neo4j-driver");
 const bcrypt = require("bcrypt");
-const crypto = require("crypto"); // 👈 Agrega esta importación
+const crypto = require("crypto");
 
 const app = express();
 const PORT = 3000;
@@ -108,7 +108,7 @@ app.post('/forgot-password', async (req, res) => {
     const resetExpires = new Date(Date.now() + 3600000); // 1 hora
     await pool.query('UPDATE usuarios SET reset_password_token = $1, reset_password_expires = $2 WHERE id_usuario = $3', [resetToken, resetExpires, user.id_usuario]);
     
-    // Para probar, enviamos el token en la respuesta. En producción, usa un servicio de SMS/notificación.
+    // Para probar, enviamos el token en la respuesta.
     res.status(200).json({ message: 'Token de recuperación generado.', token: resetToken });
   } catch (error) {
     console.error('❌ Error en /forgot-password:', error);
@@ -145,7 +145,7 @@ app.post('/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'Token inválido o expirado.' });
     }
     
-    // Hashear la nueva contraseña para mayor seguridad
+    // Hashear la nueva contraseña
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     
     await pool.query('UPDATE usuarios SET contrasena = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id_usuario = $2', [hashedPassword, user.id_usuario]);
@@ -222,6 +222,37 @@ app.put("/profile/:userId", async (req, res) => {
   } catch (error) {
     console.error("❌ Error en PUT /profile/:userId:", error);
     res.status(500).json({ error: "Error del servidor" });
+  }
+});
+
+// -----------------------
+// RUTA PARA ELIMINAR CUENTA 🗑️
+// -----------------------
+app.delete("/delete-account/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  if (!userId || isNaN(userId)) {
+    return res.status(400).json({ error: "ID de usuario inválido" });
+  }
+
+  let neo4jSession;
+  try {
+    // 1. Eliminar de Neo4j
+    neo4jSession = driver.session();
+    await neo4jSession.run("MATCH (u:Usuario {id_usuario: $userId}) DETACH DELETE u", { userId: parseInt(userId) });
+    await neo4jSession.close();
+
+    // 2. Eliminar de PostgreSQL
+    const result = await pool.query("DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *", [userId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    res.status(200).json({ message: "Usuario eliminado con éxito" });
+  } catch (error) {
+    console.error("❌ Error en DELETE /delete-account:", error);
+    res.status(500).json({ error: "Error en el servidor al intentar eliminar el usuario" });
   }
 });
 

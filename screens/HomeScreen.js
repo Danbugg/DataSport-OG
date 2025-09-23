@@ -20,7 +20,7 @@ export default function HomeScreen({ navigation, route }) {
             style={styles.button}
             onPress={() => navigation.navigate("BuscadorScreen", { userId })}
           >
-            <Text style={styles.buttonText}>Buscar Ligas, Equipos y Jugadores</Text>
+            <Text style={styles.buttonText}>Buscador</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -35,13 +35,6 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => navigation.navigate("ProfileScreen", { userId })}
           >
             <Text style={styles.buttonText}>Mi Perfil</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.button, styles.logoutButton]}
-            onPress={() => navigation.replace("LoginScreen")}
-          >
-            <Text style={styles.buttonText}>Cerrar Sesión</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -76,6 +69,5 @@ const styles = StyleSheet.create({
     width: "80%", 
     alignItems: "center" 
   },
-  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold", textAlign: "center" },
-  logoutButton: { backgroundColor: "#ff3333" },
+  buttonText: { color: "#fff", fontSize: 18, fontWeight: "bold", textAlign: "center" }
 });
