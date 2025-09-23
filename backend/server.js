@@ -29,9 +29,7 @@ app.get("/", (req, res) => {
   res.json({ message: "Servidor funcionando 🚀" });
 });
 
-// -----------------------
 // Registro y login
-// -----------------------
 app.post("/register", async (req, res) => {
   try {
     const { nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena } = req.body;
@@ -89,9 +87,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// ----------------------------------------------------
 // RUTAS DE RECUPERACIÓN DE CONTRASEÑA 🔑
-// ----------------------------------------------------
 
 // 1. Ruta para solicitar el token
 app.post('/forgot-password', async (req, res) => {
@@ -157,9 +153,7 @@ app.post('/reset-password', async (req, res) => {
   }
 });
 
-// -----------------------
 // Perfil de usuario
-// -----------------------
 app.get("/profile/:userId", async (req, res) => {
   const { userId } = req.params;
 
@@ -225,9 +219,7 @@ app.put("/profile/:userId", async (req, res) => {
   }
 });
 
-// -----------------------
-// RUTA PARA ELIMINAR CUENTA 🗑️
-// -----------------------
+// RUTA PARA ELIMINAR CUENTA 
 app.delete("/delete-account/:userId", async (req, res) => {
   const { userId } = req.params;
 
@@ -256,11 +248,7 @@ app.delete("/delete-account/:userId", async (req, res) => {
   }
 });
 
-// -----------------------
 // ENDPOINT DE BÚSQUEDA
-// -----------------------
-
-// Para probar solo ligas
 app.get("/buscar-test", async (req, res) => {
   const termino = req.query.q || "";
   const session = driver.session();
@@ -285,7 +273,7 @@ app.get("/buscar-test", async (req, res) => {
   }
 });
 
-// Búsqueda completa ligas, equipos y jugadores
+// Búsqueda ligas, equipos y jugadores
 app.get("/buscar", async (req, res) => {
   const termino = req.query.q || "";
   const session = driver.session();

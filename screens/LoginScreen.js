@@ -106,7 +106,6 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.removeItem("failedAttempts");
         await AsyncStorage.removeItem("lockoutTime");
         
-        // --- LA LÍNEA CRÍTICA: GUARDA EL ID EN ASYNCSTORAGE ---
         await AsyncStorage.setItem('userId', String(data.usuario.id_usuario));
 
         const usuario = data.usuario;

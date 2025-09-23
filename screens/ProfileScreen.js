@@ -23,7 +23,6 @@ export default function ProfileScreen({ route, navigation }) {
   const fondoLogin = require("../assets/fondoLogin.jpg");
 
   const fetchProfile = async () => {
-    // --- LÍNEA MODIFICADA: BUSCA EN ASYNCSTORAGE COMO RESPALDO ---
     const finalUserId = userId || (await AsyncStorage.getItem("userId"));
 
     if (!finalUserId || isNaN(finalUserId)) {

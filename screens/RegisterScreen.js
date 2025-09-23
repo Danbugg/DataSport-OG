@@ -34,7 +34,6 @@ export default function RegisterScreen({ navigation }) {
     hideDatePicker();
   };
 
-  // Validación de contraseña
   const validatePassword = (password) => {
     const regex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&._-])[A-Za-z\d@$!%*?&._-]{8,}$/;
@@ -53,7 +52,6 @@ export default function RegisterScreen({ navigation }) {
   };
 
   const handleRegister = async () => {
-    // Validaciones personalizadas
     if (!nombre.trim()) {
       Alert.alert("Error", "Por favor ingresa tu nombre");
       return;

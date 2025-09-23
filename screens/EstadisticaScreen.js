@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   backButton: {
     alignSelf: "flex-start",
     margin: 10,
-    backgroundColor: "#800000", // vinotinto
+    backgroundColor: "#800000", 
     paddingVertical: 8,
     paddingHorizontal: 15,
     borderRadius: 20,
