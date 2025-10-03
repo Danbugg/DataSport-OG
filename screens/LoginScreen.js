@@ -93,7 +93,7 @@ export default function LoginScreen({ navigation }) {
     setLoading(true);
 
     try {
-      const response = await fetch("http://10.0.2.2:3000/login", {
+      const response = await fetch("http://192.168.1.6:3000/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, contrasena: password }),
@@ -109,7 +109,7 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('userId', String(data.usuario.id_usuario));
 
         const usuario = data.usuario;
-        Alert.alert("Bienvenido", `Has iniciado sesión como ${usuario.nombre_usuario}`);
+        Alert.alert("Te damos la bienvenida a DataSport", `Has iniciado sesión como ${usuario.nombre_usuario}`);
         navigation.navigate("HomeScreen", { userId: usuario.id_usuario });
       } else {
         const newAttempts = failedAttempts + 1;
@@ -117,14 +117,14 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem("failedAttempts", newAttempts.toString());
 
         if (newAttempts >= 3) {
-          const lockoutDuration = 2 * 60 * 1000;
+          const lockoutDuration = 1 * 60 * 1000;
           const lockoutTimestamp = Date.now() + lockoutDuration;
           setIsLocked(true);
-          setLockoutTime(2 * 60);
+          setLockoutTime(1 * 60);
           await AsyncStorage.setItem("lockoutTime", lockoutTimestamp.toString());
           Alert.alert(
             "Demasiados intentos",
-            "Has fallado 3 veces. Tu cuenta ha sido bloqueada por 2 minutos."
+            "Has fallado 3 veces. Tu cuenta ha sido bloqueada por 1 minuto."
           );
         } else {
           Alert.alert(

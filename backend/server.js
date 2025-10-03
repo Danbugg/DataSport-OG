@@ -308,5 +308,5 @@ app.get("/buscar", async (req, res) => {
 
 // -----------------------
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);
+  console.log(`🚀 Servidor corriendo en http://192.168.1.6:${PORT}`);
 });

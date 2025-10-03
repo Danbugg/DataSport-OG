@@ -47,7 +47,7 @@ export default function EditProfileScreen({ route, navigation }) {
     setLoading(true);
 
     try {
-      const response = await fetch(`http://10.0.2.2:3000/profile/${userId}`, {
+      const response = await fetch(`http://192.168.1.6:3000/profile/${userId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
