@@ -52,45 +52,30 @@ export default function RegisterScreen({ navigation }) {
   };
 
   const handleRegister = async () => {
-    if (!nombre.trim()) {
-      Alert.alert("Error", "Por favor ingresa tu nombre");
-      return;
-    }
-    if (!apellido.trim()) {
-      Alert.alert("Error", "Por favor ingresa tu apellido");
-      return;
-    }
-    if (!fechaNacimiento) {
-      Alert.alert("Error", "Por favor selecciona tu fecha de nacimiento");
-      return;
-    }
-    if (!email.trim()) {
-      Alert.alert("Error", "Por favor ingresa tu correo electrónico");
-      return;
-    }
+    // 🔹 Validaciones antes de enviar
+    if (!nombre.trim()) return Alert.alert("Error", "Por favor ingresa tu nombre");
+    if (!apellido.trim()) return Alert.alert("Error", "Por favor ingresa tu apellido");
+    if (!fechaNacimiento) return Alert.alert("Error", "Por favor selecciona tu fecha de nacimiento");
+    if (!email.trim()) return Alert.alert("Error", "Por favor ingresa tu correo electrónico");
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      Alert.alert("Error", "Por favor ingresa un correo electrónico válido");
-      return;
+      return Alert.alert("Error", "Por favor ingresa un correo electrónico válido");
     }
-    if (!usuario.trim()) {
-      Alert.alert("Error", "Por favor elige un nombre de usuario");
-      return;
-    }
-    if (!password.trim()) {
-      Alert.alert("Error", "Por favor ingresa una contraseña");
-      return;
-    }
+
+    if (!usuario.trim()) return Alert.alert("Error", "Por favor elige un nombre de usuario");
+    if (!password.trim()) return Alert.alert("Error", "Por favor ingresa una contraseña");
+
     if (!validatePassword(password)) {
-      Alert.alert(
+      return Alert.alert(
         "Contraseña insegura",
         "La contraseña debe tener:\n• Al menos 8 caracteres\n• Una mayúscula\n• Una minúscula\n• Un número\n• Un símbolo especial"
       );
-      return;
     }
 
+    // 🔹 Envío al servidor
     setLoading(true);
-    const serverUrl = "http://192.168.1.6:3000/register";
+    const serverUrl = "http://localhost:3000/register";
 
     try {
       const response = await fetch(serverUrl, {
@@ -118,10 +103,17 @@ export default function RegisterScreen({ navigation }) {
           { text: "OK", onPress: () => navigation.navigate("LoginScreen") },
         ]);
       } else {
-        Alert.alert(
-          "Error de registro",
-          data.error || "Ocurrió un error en el servidor."
-        );
+        // 🔹 Manejo de errores que manda el backend
+        if (data.error && data.error.toLowerCase().includes("correo")) {
+          Alert.alert("Error de registro", "El correo ya existe");
+        } else if (data.error && data.error.toLowerCase().includes("usuario")) {
+          Alert.alert("Error de registro", "El nombre de usuario ya existe");
+        } else {
+          Alert.alert(
+            "Error de registro",
+            data.error || "Ocurrió un error en el servidor."
+          );
+        }
       }
     } catch (error) {
       console.error("Error de conexión:", error);
@@ -204,7 +196,6 @@ export default function RegisterScreen({ navigation }) {
                 autoCapitalize="none"
               />
 
-              {/* Campo de contraseña con ojito */}
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]}

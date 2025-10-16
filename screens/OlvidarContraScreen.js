@@ -34,7 +34,7 @@ export default function OlvidarContraScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch('http://192.168.1.6:3000/forgot-password', {
+      const response = await fetch('http://localhost:3000/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -62,7 +62,7 @@ export default function OlvidarContraScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch('http://192.168.1.6:3000/verify-token', {
+      const response = await fetch('http://localhost:3000/verify-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -90,7 +90,7 @@ export default function OlvidarContraScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const response = await fetch('http://192.168.1.6:3000/reset-password', {
+      const response = await fetch('http://localhost:3000/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, newPassword }),

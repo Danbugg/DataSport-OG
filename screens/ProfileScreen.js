@@ -34,7 +34,7 @@ export default function ProfileScreen({ route, navigation }) {
     setLoading(true);
 
     try {
-      const response = await fetch(`http://192.168.1.6:3000/profile/${finalUserId}`);
+      const response = await fetch(`http://localhost:3000/profile/${finalUserId}`);
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -78,7 +78,7 @@ export default function ProfileScreen({ route, navigation }) {
               return;
             }
             try {
-              const response = await fetch(`http://192.168.1.6:3000/delete-account/${idToDelete}`, {
+              const response = await fetch(`http://localhost:3000/delete-account/${idToDelete}`, {
                 method: "DELETE",
               });
 

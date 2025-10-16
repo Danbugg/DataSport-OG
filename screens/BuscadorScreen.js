@@ -37,7 +37,7 @@ export default function BuscadorScreen({ navigation, route }) {
     setLoading(true);
     try {
       const response = await fetch(
-        `http://192.168.1.6:3000/buscar?q=${encodeURIComponent(q)}`
+        `http://localhost:3000/buscar?q=${encodeURIComponent(q)}`
       );
       const data = await response.json();
       setResultados(data);
