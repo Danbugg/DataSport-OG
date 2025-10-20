@@ -21,7 +21,7 @@ export default function EstadisticaScreen({ navigation }) {
           "https://v3.football.api-sports.io/fixtures?live=all",
           {
             headers: {
-              "x-apisports-key": "",
+              "x-apisports-key": "b9a9742ac0bbe81d1c226b95c758b058",
             },
           }
         );
