@@ -110,7 +110,7 @@ export default function LoginScreen({ navigation }) {
 
         const usuario = data.usuario;
         Alert.alert("Te damos la bienvenida a DataSport", `Has iniciado sesión como ${usuario.nombre_usuario}`);
-        navigation.navigate("HomeScreen", { userId: usuario.id_usuario });
+        navigation.navigate("MainTabs", { userId: usuario.id_usuario });
       } else {
         const newAttempts = failedAttempts + 1;
         setFailedAttempts(newAttempts);

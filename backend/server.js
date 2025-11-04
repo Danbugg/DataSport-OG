@@ -1,330 +1,966 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const { Pool } = require("pg");
+const {Pool} = require("pg");
 const neo4j = require("neo4j-driver");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
+const multer = require("multer"); 
+const path = require("path"); 
+const fs = require("fs"); 
 
 const app = express();
 const PORT = 3000;
 
+// --- IP DEL HOST PARA ACCESO REMOTO (IMÁGENES) ---
+// ⚠️ IMPORTANTE: Mantener en 10.0.2.2 si usas el EMULADOR de Android.
+const HOST_IP = "localhost"; 
+// -------------------------------------------------
+
+// Función auxiliar para parsear ID a entero de manera segura
+const safeParseInt = (value) => {
+    if (!value) return null;
+    const num = parseInt(value, 10);
+    return isNaN(num) ? null : num;
+};
+
+
+// Configuración de Multer para la carga de archivos
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir); // Usar la ruta absoluta para la carpeta 'uploads'
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
+const upload = multer({ storage: storage });
+// ---------------------------------------------
+
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "DataSport",
-  password: "admin",
-  port: 5432,
+    user: "postgres",
+    host: "localhost",
+    database: "DataSport",
+    password: "admin",
+    port: 5432,
 });
 
 const driver = neo4j.driver(
-  "bolt://localhost:7687",
-  neo4j.auth.basic("neo4j", "administrador")
+    "bolt://localhost:7687",
+    neo4j.auth.basic("neo4j", "administrador")
 );
 
+// Middleware
 app.use(cors());
-app.use(bodyParser.json());
+// Middleware para servir archivos estáticos (imágenes)
+app.use('/uploads', express.static(uploadDir));
+// Aplicar bodyParser.json SOLO a rutas que NO usen multer (la mayoría de tus rutas)
+// Las rutas con multer manejan el body parse por sí mismas
+app.use(bodyParser.json()); 
+
 
 // ------------------ HOME ------------------
 app.get("/", (req, res) => {
-  res.json({ message: "Servidor funcionando 🚀" });
+    res.json({message: "Servidor funcionando 🚀"});
 });
 
 // ------------------ REGISTRO ------------------
 app.post("/register", async (req, res) => {
-  try {
-    const { nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena } = req.body;
+    try {
+        const {nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena} = req.body;
 
-    if (!nombre || !apellido || !email || !fecha_nacimiento || !nombre_usuario || !contrasena) {
-      return res.status(400).json({ error: "Faltan datos" });
+        if (!nombre || !apellido || !email || !fecha_nacimiento || !nombre_usuario || !contrasena) {
+            return res.status(400).json({error: "Faltan datos"});
+        }
+
+        // Validar correo duplicado
+        const checkEmail = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
+        if (checkEmail.rows.length > 0) {
+            return res.status(400).json({error: "El correo ya existe"});
+        }
+
+        // Validar usuario duplicado
+        const checkUser = await pool.query("SELECT * FROM usuarios WHERE nombre_usuario = $1", [nombre_usuario]);
+        if (checkUser.rows.length > 0) {
+            return res.status(400).json({error: "El nombre de usuario ya existe"});
+        }
+
+        const hashedPassword = await bcrypt.hash(contrasena, 10);
+
+        const query = `
+            INSERT INTO usuarios (nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena, rol_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
+        const values = [nombre, apellido, email, fecha_nacimiento, nombre_usuario, hashedPassword, 1];
+
+        const result = await pool.query(query, values);
+        const usuario = result.rows[0];
+
+        // Guardar en Neo4j
+        const session = driver.session();
+        await session.run(
+            "CREATE (u:Usuario {id_usuario: $id_usuario, email: $email, username: $username})",
+            {id_usuario: usuario.id_usuario, email: usuario.email, username: usuario.nombre_usuario}
+        );
+        await session.close();
+
+        res.status(201).json({message: "Usuario registrado con éxito", usuario});
+    } catch (error) {
+        console.error("❌ Error en /register:", error);
+
+        if (error.code === "23505") {
+            if (error.detail.includes("(email)")) {
+                return res.status(400).json({error: "El correo ya existe"});
+            }
+            if (error.detail.includes("(nombre_usuario)")) {
+                return res.status(400).json({error: "El nombre de usuario ya existe"});
+            }
+        }
+
+        res.status(500).json({error: "Error interno del servidor"});
     }
-
-    // Validar correo duplicado
-    const checkEmail = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
-    if (checkEmail.rows.length > 0) {
-      return res.status(400).json({ error: "El correo ya existe" });
-    }
-
-    // Validar usuario duplicado
-    const checkUser = await pool.query("SELECT * FROM usuarios WHERE nombre_usuario = $1", [nombre_usuario]);
-    if (checkUser.rows.length > 0) {
-      return res.status(400).json({ error: "El nombre de usuario ya existe" });
-    }
-
-    const hashedPassword = await bcrypt.hash(contrasena, 10);
-
-    const query = `
-      INSERT INTO usuarios (nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena, rol_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
-    const values = [nombre, apellido, email, fecha_nacimiento, nombre_usuario, hashedPassword, 1];
-
-    const result = await pool.query(query, values);
-    const usuario = result.rows[0];
-
-    // Guardar en Neo4j
-    const session = driver.session();
-    await session.run(
-      "CREATE (u:Usuario {id_usuario: $id_usuario, email: $email, username: $username})",
-      { id_usuario: usuario.id_usuario, email: usuario.email, username: usuario.nombre_usuario }
-    );
-    await session.close();
-
-    res.status(201).json({ message: "Usuario registrado con éxito", usuario });
-  } catch (error) {
-    console.error("❌ Error en /register:", error);
-
-    if (error.code === "23505") {
-      if (error.detail.includes("(email)")) {
-        return res.status(400).json({ error: "El correo ya existe" });
-      }
-      if (error.detail.includes("(nombre_usuario)")) {
-        return res.status(400).json({ error: "El nombre de usuario ya existe" });
-      }
-    }
-
-    res.status(500).json({ error: "Error interno del servidor" });
-  }
 });
 
 // ------------------ LOGIN ------------------
 app.post("/login", async (req, res) => {
-  const { email, contrasena } = req.body;
+    const {email, contrasena} = req.body;
 
-  try {
-    const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
+    try {
+        const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
 
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: "Usuario no encontrado" });
+        if (result.rows.length === 0) {
+            return res.status(400).json({error: "Usuario no encontrado"});
+        }
+
+        const usuario = result.rows[0];
+        const validPassword = await bcrypt.compare(contrasena, usuario.contrasena);
+
+        if (!validPassword) {
+            return res.status(400).json({error: "Credenciales inválidas"});
+        }
+
+        res.json({message: "Login exitoso", usuario});
+    } catch (error) {
+        console.error("❌ Error en /login:", error);
+        res.status(500).json({error: "Error en el servidor"});
     }
-
-    const usuario = result.rows[0];
-    const validPassword = await bcrypt.compare(contrasena, usuario.contrasena);
-
-    if (!validPassword) {
-      return res.status(400).json({ error: "Credenciales inválidas" });
-    }
-
-    res.json({ message: "Login exitoso", usuario });
-  } catch (error) {
-    console.error("❌ Error en /login:", error);
-    res.status(500).json({ error: "Error en el servidor" });
-  }
 });
 
 // ------------------ RECUPERAR CONTRASEÑA ------------------
 app.post("/forgot-password", async (req, res) => {
-  const { email } = req.body;
-  try {
-    const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
-    const user = result.rows[0];
+    const {email} = req.body;
+    try {
+        const result = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
+        const user = result.rows[0];
 
-    if (!user) {
-      return res.status(404).json({ error: "Correo no encontrado." });
+        if (!user) {
+            return res.status(404).json({error: "Correo no encontrado."});
+        }
+
+        const resetToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const resetExpires = new Date(Date.now() + 3600000);
+        await pool.query(
+            "UPDATE usuarios SET reset_password_token = $1, reset_password_expires = $2 WHERE id_usuario = $3",
+            [resetToken, resetExpires, user.id_usuario]
+        );
+
+        res.status(200).json({message: "Token de recuperación generado.", token: resetToken});
+    } catch (error) {
+        console.error("❌ Error en /forgot-password:", error);
+        res.status(500).json({error: "Error en el servidor."});
     }
-
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    const resetExpires = new Date(Date.now() + 3600000);
-    await pool.query(
-      "UPDATE usuarios SET reset_password_token = $1, reset_password_expires = $2 WHERE id_usuario = $3",
-      [resetToken, resetExpires, user.id_usuario]
-    );
-
-    res.status(200).json({ message: "Token de recuperación generado.", token: resetToken });
-  } catch (error) {
-    console.error("❌ Error en /forgot-password:", error);
-    res.status(500).json({ error: "Error en el servidor." });
-  }
 });
 
 app.post("/verify-token", async (req, res) => {
-  const { token } = req.body;
-  try {
-    const result = await pool.query(
-      "SELECT * FROM usuarios WHERE reset_password_token = $1 AND reset_password_expires > NOW()",
-      [token]
-    );
-    const user = result.rows[0];
+    const {token} = req.body;
+    try {
+        const result = await pool.query(
+            "SELECT * FROM usuarios WHERE reset_password_token = $1 AND reset_password_expires > NOW()",
+            [token]
+        );
+        const user = result.rows[0];
 
-    if (!user) {
-      return res.status(400).json({ error: "Token inválido o expirado." });
+        if (!user) {
+            return res.status(400).json({error: "Token inválido o expirado."});
+        }
+
+        res.status(200).json({message: "Token verificado con éxito."});
+    } catch (error) {
+        console.error("❌ Error en /verify-token:", error);
+        res.status(500).json({error: "Error en el servidor."});
     }
-
-    res.status(200).json({ message: "Token verificado con éxito." });
-  } catch (error) {
-    console.error("❌ Error en /verify-token:", error);
-    res.status(500).json({ error: "Error en el servidor." });
-  }
 });
 
 app.post("/reset-password", async (req, res) => {
-  const { token, newPassword } = req.body;
-  try {
-    const result = await pool.query(
-      "SELECT * FROM usuarios WHERE reset_password_token = $1 AND reset_password_expires > NOW()",
-      [token]
-    );
-    const user = result.rows[0];
+    const {token, newPassword} = req.body;
+    try {
+        const result = await pool.query(
+            "SELECT * FROM usuarios WHERE reset_password_token = $1 AND reset_password_expires > NOW()",
+            [token]
+        );
+        const user = result.rows[0];
 
-    if (!user) {
-      return res.status(400).json({ error: "Token inválido o expirado." });
+        if (!user) {
+            return res.status(400).json({error: "Token inválido o expirado."});
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await pool.query(
+            "UPDATE usuarios SET contrasena = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id_usuario = $2",
+            [hashedPassword, user.id_usuario]
+        );
+
+        res.status(200).json({message: "Contraseña restablecida con éxito."});
+    } catch (error) {
+        console.error("❌ Error en /reset-password:", error);
+        res.status(500).json({error: "Error en el servidor."});
     }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query(
-      "UPDATE usuarios SET contrasena = $1, reset_password_token = NULL, reset_password_expires = NULL WHERE id_usuario = $2",
-      [hashedPassword, user.id_usuario]
-    );
-
-    res.status(200).json({ message: "Contraseña restablecida con éxito." });
-  } catch (error) {
-    console.error("❌ Error en /reset-password:", error);
-    res.status(500).json({ error: "Error en el servidor." });
-  }
 });
 
 // ------------------ PERFIL ------------------
 app.get("/profile/:userId", async (req, res) => {
-  const { userId } = req.params;
+    const {userId} = req.params;
 
-  if (!userId || isNaN(userId)) {
-    return res.status(400).json({ error: "ID de usuario inválido" });
-  }
-
-  try {
-    const result = await pool.query("SELECT * FROM usuarios WHERE id_usuario = $1", [userId]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({error: "ID de usuario inválido"});
     }
 
-    const user = {
-      ...result.rows[0],
-      descripcion: result.rows[0].descripcion || "",
-      foto_perfil: result.rows[0].foto_perfil || "",
-    };
+    try {
+        const result = await pool.query("SELECT * FROM usuarios WHERE id_usuario = $1", [userId]);
 
-    res.json({ user });
-  } catch (error) {
-    console.error("❌ Error en GET /profile/:userId:", error);
-    res.status(500).json({ error: "Error del servidor" });
-  }
+        if (result.rows.length === 0) {
+            return res.status(404).json({error: "Usuario no encontrado"});
+        }
+        
+        // Generar la URL completa de la imagen si existe
+        let fotoUrl = result.rows[0].foto_perfil;
+        if (fotoUrl && !fotoUrl.startsWith('http')) {
+             // Asume que si no es una URL completa, es el nombre del archivo en 'uploads'
+             fotoUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(fotoUrl)}`;
+        }
+
+
+        const user = {
+            ...result.rows[0],
+            descripcion: result.rows[0].descripcion || "",
+            foto_perfil: fotoUrl || "", // Usar la URL completa
+        };
+
+        res.json({user});
+    } catch (error) {
+        console.error("❌ Error en GET /profile/:userId:", error);
+        res.status(500).json({error: "Error del servidor"});
+    }
 });
 
-app.put("/profile/:userId", async (req, res) => {
-  const { userId } = req.params;
-  const { descripcion, foto_perfil } = req.body;
-
-  if (!userId || isNaN(userId)) {
-    return res.status(400).json({ error: "ID de usuario inválido" });
-  }
-
-  try {
-    const result = await pool.query(
-      `UPDATE usuarios 
-        SET descripcion = $1, foto_perfil = $2 
-        WHERE id_usuario = $3 
-        RETURNING *`,
-      [descripcion || "", foto_perfil || "", userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+app.put("/profile/:userId", upload.single('profileImage'), async (req, res) => {
+    const { userId } = req.params;
+    
+    // Multer procesa el campo de texto 'descripcion'
+    const descripcion = req.body.descripcion || ""; 
+    
+    // Si no se subió un nuevo archivo (req.file), buscamos la URL existente en req.body.foto_perfil
+    const existingPhotoUrl = req.body.foto_perfil; 
+    
+    let finalPhotoUrl = existingPhotoUrl; 
+    
+    if (!userId || isNaN(userId)) {
+        if (req.file) fs.unlinkSync(req.file.path); 
+        return res.status(400).json({error: "ID de usuario inválido"});
     }
 
-    res.json({ message: "Perfil actualizado con éxito", user: result.rows[0] });
-  } catch (error) {
-    console.error("❌ Error en PUT /profile/:userId:", error);
-    res.status(500).json({ error: "Error del servidor" });
-  }
+    // 1. Manejar la carga de la nueva imagen
+    if (req.file) {
+        // Si hay un archivo (imagen nueva), construimos la URL completa para guardar
+        const fileName = req.file.filename;
+        finalPhotoUrl = `http://${HOST_IP}:${PORT}/uploads/${fileName}`; 
+        console.log(`✅ Nueva foto de perfil subida: ${finalPhotoUrl}`);
+    } 
+
+    // 2. Ejecutar la actualización en PostgreSQL
+    try {
+        const result = await pool.query(
+            `UPDATE usuarios 
+             SET descripcion = $1, foto_perfil = $2 
+             WHERE id_usuario = $3 
+             RETURNING *`,
+            [descripcion, finalPhotoUrl || "", userId] // Guardamos la URL pública o la que se envió
+        );
+
+        if (result.rows.length === 0) {
+            if (req.file) fs.unlinkSync(req.file.path); 
+            return res.status(404).json({error: "Usuario no encontrado"});
+        }
+
+        // 3. Devolver la respuesta con la URL corregida para el frontend
+        const updatedUser = {
+            ...result.rows[0],
+            foto_perfil: finalPhotoUrl || "", 
+        };
+
+        res.json({message: "Perfil actualizado con éxito", user: updatedUser});
+    } catch (error) {
+        if (req.file) fs.unlinkSync(req.file.path); 
+        console.error("❌ Error en PUT /profile/:userId:", error);
+        res.status(500).json({error: "Error del servidor al actualizar el perfil."});
+    }
+});
+
+
+// ------------------ PUBLICACIONES ------------------
+
+// POST: Crear una publicación con soporte para carga de archivos
+app.post("/posts/create", upload.single('postImage'), async (req, res) => {
+    // AHORA req.body DEBERÍA TENER LOS DATOS DE TEXTO
+    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
+    const userId = safeParseInt(req.body.userId); 
+    const { content } = req.body; 
+    
+    // 1. VALIDACIÓN
+    if (!userId || !content) {
+        // Si hay un error, intentamos eliminar la imagen temporal si se subió
+        if (req.file) fs.unlinkSync(req.file.path); 
+        
+        // 💡 MEJORA: Mensaje de error más detallado
+        let errorMsg = "Faltan datos requeridos: ";
+        if (!userId) {
+            // userId será null si safeParseInt falló (valor no numérico o vacío)
+            errorMsg += `[Usuario ID inválido o faltante. Valor recibido: ${req.body.userId}]`;
+        }
+        if (!content) {
+            // Esto solo es true si el contenido es null o undefined (no si es un string vacío, ya que el cliente lo valida)
+            errorMsg += "[Contenido faltante. Valor recibido: " + req.body.content + "]";
+        }
+        
+        return res.status(400).json({ error: errorMsg });
+    }
+
+    // 2. OBTENER URL DE LA IMAGEN
+    const fileName = req.file ? req.file.filename : null; 
+
+    let imageUrl = null;
+    if (fileName) {
+        // Guardamos la URL completa para el frontend 
+        imageUrl = `http://${HOST_IP}:${PORT}/uploads/${fileName}`; 
+        console.log(`✅ URL de imagen generada: ${imageUrl}`);
+    }
+
+    // 3. Intentar la inserción en PostgreSQL
+    try {
+        const sqlQuery = `
+            INSERT INTO posts (user_id, content, image_url)
+            VALUES ($1, $2, $3)
+            RETURNING id, created_at;
+        `;
+        
+        const result = await pool.query(sqlQuery, [userId, content, imageUrl]);
+
+        // 4. Respuesta exitosa
+        res.status(201).json({ 
+            message: "Publicación creada con éxito.",
+            post: { 
+                id: result.rows[0].id, 
+                createdAt: result.rows[0].created_at,
+                imageUrl: imageUrl 
+            }
+        });
+
+    } catch (error) {
+        // Si hay un error de DB, intentamos eliminar la imagen temporal
+        if (req.file) fs.unlinkSync(req.file.path); 
+        
+        console.error('❌ Error al insertar la publicación en la BD:', error);
+        
+        if (error.code === '23503') { 
+            return res.status(400).json({ error: "El ID de usuario no existe." });
+        }
+        res.status(500).json({ error: "Ocurrió un error interno al crear la publicación." });
+    }
+});
+
+// --- PUBLICACIONES (LECTURA) ---
+
+// Función auxiliar para obtener contadores de likes y comentarios
+const getPostMetrics = async (postId, currentUserId) => {
+    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
+    const numericUserId = safeParseInt(currentUserId); 
+    
+    try {
+        // 1. Contar Likes
+        const likesResult = await pool.query(
+            'SELECT COUNT(*)::INTEGER FROM likes WHERE post_id = $1',
+            [postId]
+        );
+        const likeCount = likesResult.rows[0].count;
+
+        // 2. Contar Comentarios
+        const commentResult = await pool.query(
+            'SELECT COUNT(*)::INTEGER FROM comentarios WHERE post_id = $1',
+            [postId]
+        );
+        const commentCount = commentResult.rows[0].count;
+
+        // 3. Verificar si el usuario actual ya dio like
+        let isLikedByCurrentUser = false;
+        if (numericUserId) {
+            const likedResult = await pool.query(
+                'SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2',
+                [postId, numericUserId] // Usamos el ID ya convertido y limpio
+            );
+            isLikedByCurrentUser = likedResult.rows.length > 0;
+        }
+
+        return { likeCount, commentCount, isLikedByCurrentUser };
+    } catch (error) {
+        console.error('Error fetching post metrics:', error);
+        // Devolver 0 y false en caso de error para no detener el feed
+        return { likeCount: 0, commentCount: 0, isLikedByCurrentUser: false };
+    }
+};
+
+
+// GET: Obtener TODAS las publicaciones para el Home Feed (FEED PRINCIPAL)
+app.get("/posts", async (req, res) => {
+    // 💡 CORRECCIÓN: El userId se pasa para obtener las métricas de like del usuario
+    const currentUserId = req.query.userId; 
+
+    try {
+        // Consulta base para obtener posts con la información del autor
+        const sqlQuery = `
+            SELECT 
+                p.id, 
+                p.content, 
+                p.image_url AS "imageUrl", 
+                p.created_at AS "createdAt", 
+                u.id_usuario AS "authorId",
+                u.nombre_usuario AS "authorUsername", 
+                u.foto_perfil AS "authorProfilePic"
+            FROM posts p
+            JOIN usuarios u ON p.user_id = u.id_usuario
+            ORDER BY p.created_at DESC; 
+        `;
+        
+        const result = await pool.query(sqlQuery);
+        
+        // CORRECCIÓN: Mapear para completar URLs de imágenes
+        const postsWithMetrics = await Promise.all(result.rows.map(async (post) => {
+            const metrics = await getPostMetrics(post.id, currentUserId);
+            
+            // Reconstruir la URL de la imagen del Post
+            let postImageUrl = post.imageUrl;
+            if (postImageUrl && !postImageUrl.startsWith('http')) {
+                // Si solo tenemos el nombre del archivo, lo corregimos
+                postImageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(postImageUrl)}`;
+            }
+
+            // Reconstruir la URL de la Foto de Perfil del Autor
+            let authorProfilePicUrl = post.authorProfilePic;
+            if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
+                authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
+            }
+
+
+            return { 
+                ...post, 
+                ...metrics,
+                imageUrl: postImageUrl, // Usar la URL corregida
+                authorProfilePic: authorProfilePicUrl // Usar la URL corregida
+            };
+        }));
+
+        res.status(200).json({ posts: postsWithMetrics });
+
+    } catch (error) {
+        console.error("❌ Error al obtener posts del feed:", error);
+        res.status(500).json({ error: "Error interno del servidor al cargar publicaciones." });
+    }
+});
+
+// GET: Obtener publicaciones de un usuario específico para el Perfil
+app.get("/profile/:userId/posts", async (req, res) => {
+    const { userId } = req.params;
+    const currentUserId = req.query.currentUserId; 
+
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({ error: "ID de usuario inválido." });
+    }
+
+    try {
+        const sqlQuery = `
+            SELECT 
+                p.id, 
+                p.content, 
+                p.image_url AS "imageUrl", 
+                p.created_at AS "createdAt",
+                u.id_usuario AS "authorId",
+                u.nombre_usuario AS "authorUsername", 
+                u.foto_perfil AS "authorProfilePic"
+            FROM posts p
+            JOIN usuarios u ON p.user_id = u.id_usuario
+            WHERE p.user_id = $1
+            ORDER BY p.created_at DESC;
+        `;
+
+        const result = await pool.query(sqlQuery, [userId]);
+        
+        // CORRECCIÓN: Mapear para completar URLs de imágenes
+        const postsWithMetrics = await Promise.all(result.rows.map(async (post) => {
+            const metrics = await getPostMetrics(post.id, currentUserId);
+            
+            // Reconstruir la URL de la imagen del Post
+            let postImageUrl = post.imageUrl;
+            if (postImageUrl && !postImageUrl.startsWith('http')) {
+                postImageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(postImageUrl)}`;
+            }
+
+            // Reconstruir la URL de la Foto de Perfil del Autor
+            let authorProfilePicUrl = post.authorProfilePic;
+            if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
+                authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
+            }
+
+            return { 
+                ...post, 
+                ...metrics, 
+                imageUrl: postImageUrl, // Usar la URL corregida
+                authorProfilePic: authorProfilePicUrl // Usar la URL corregida
+            };
+        }));
+
+        res.status(200).json({ posts: postsWithMetrics });
+
+    } catch (error) {
+        console.error(`❌ Error al obtener posts del usuario ${userId}:`, error);
+        res.status(500).json({ error: "Error interno del servidor al cargar publicaciones del perfil." });
+    }
+});
+
+// ------------------ LIKES Y COMENTARIOS (NUEVAS RUTAS) ------------------
+
+// 1. POST: Dar "Me Gusta"
+app.post("/posts/:postId/like", async (req, res) => {
+    const { postId } = req.params;
+    
+    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
+    const userId = safeParseInt(req.body.userId); 
+
+    if (!userId) {
+        return res.status(400).json({ error: "User ID inválido o faltante." });
+    }
+
+    try {
+        const sqlQuery = `
+            INSERT INTO likes (post_id, user_id, created_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (post_id, user_id) DO NOTHING
+            RETURNING id; 
+        `;
+        
+        const result = await pool.query(sqlQuery, [postId, userId]);
+
+        if (result.rowCount === 0) {
+            return res.status(200).json({ message: "Like ya existía o ya fue registrado." });
+        }
+
+        res.status(201).json({ message: "Like registrado con éxito." });
+
+    } catch (error) {
+        console.error('❌ Error al registrar like:', error);
+        res.status(500).json({ error: "Error interno del servidor al registrar like." });
+    }
+});
+
+// 2. DELETE: Quitar "Me Gusta"
+app.delete("/posts/:postId/like", async (req, res) => {
+    const { postId } = req.params;
+    
+    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
+    const userId = safeParseInt(req.body.userId); 
+
+    if (!userId) {
+        return res.status(400).json({ error: "User ID inválido o faltante." });
+    }
+
+    try {
+        const sqlQuery = `
+            DELETE FROM likes
+            WHERE post_id = $1 AND user_id = $2;
+        `;
+        
+        const result = await pool.query(sqlQuery, [postId, userId]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Like no encontrado para eliminar." });
+        }
+
+        res.status(200).json({ message: "Like eliminado con éxito." });
+
+    } catch (error) {
+        console.error('❌ Error al eliminar like:', error);
+        res.status(500).json({ error: "Error interno del servidor al eliminar like." });
+    }
+});
+
+
+// 3. GET: Obtener Comentarios del Post
+app.get("/posts/:postId/comments", async (req, res) => {
+    const { postId } = req.params;
+    
+    try {
+        const sqlQuery = `
+            SELECT
+                c.id AS id,
+                c.content AS content,
+                c.created_at AS "createdAt",
+                u.nombre_usuario AS "authorUsername",
+                u.foto_perfil AS "authorProfilePic"
+            FROM
+                comentarios c
+            JOIN
+                usuarios u ON c.user_id = u.id_usuario
+            WHERE
+                c.post_id = $1  
+            ORDER BY 
+                c.created_at DESC;
+        `;
+        
+        const result = await pool.query(sqlQuery, [postId]);
+
+        // Mapear los resultados para corregir la URL de la foto de perfil del autor
+        const comments = result.rows.map(comment => {
+            let authorProfilePicUrl = comment.authorProfilePic;
+            if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
+                authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
+            }
+            return {
+                ...comment,
+                authorProfilePic: authorProfilePicUrl
+            };
+        });
+
+        res.status(200).json({ comments });
+
+    } catch (error) {
+        console.error('❌ Error al obtener comentarios:', error);
+        res.status(500).json({ error: 'Error interno del servidor al obtener comentarios.' });
+    }
+});
+
+// 4. POST: Crear un nuevo Comentario
+app.post("/posts/:postId/comments", async (req, res) => {
+    const { postId } = req.params;
+    
+    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
+    const userId = safeParseInt(req.body.userId); 
+    const { content } = req.body; 
+
+    if (!userId || !content) {
+        return res.status(400).json({ error: "User ID y contenido son requeridos." });
+    }
+    
+    try {
+        const insertQuery = `
+            INSERT INTO comentarios (post_id, user_id, content, created_at)
+            VALUES ($1, $2, $3, NOW())
+            RETURNING id;
+        `;
+        
+        // 1. Insertar el comentario
+        const insertResult = await pool.query(insertQuery, [postId, userId, content]);
+        const newCommentId = insertResult.rows[0].id;
+
+        // 2. Obtener la información completa del comentario para devolverla al frontend
+        const fetchQuery = `
+            SELECT
+                c.id,
+                c.content,
+                c.created_at AS "createdAt",
+                u.nombre_usuario AS "authorUsername",
+                u.foto_perfil AS "authorProfilePic"
+            FROM comentarios c
+            JOIN usuarios u ON c.user_id = u.id_usuario
+            WHERE c.id = $1
+        `;
+        
+        const fetchResult = await pool.query(fetchQuery, [newCommentId]);
+        
+        // 3. Corregir la URL de la foto de perfil antes de devolver el comentario
+        let newComment = fetchResult.rows[0];
+        let authorProfilePicUrl = newComment.authorProfilePic;
+        if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
+            newComment.authorProfilePic = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
+        }
+
+
+        // Devolver el nuevo comentario insertado (tal como espera CommentsScreen.js)
+        res.status(201).json({ 
+            message: "Comentario publicado con éxito.",
+            newComment: newComment
+        });
+
+    } catch (error) {
+        console.error('❌ Error al crear comentario:', error);
+        res.status(500).json({ error: 'Error interno del servidor al publicar comentario.' });
+    }
 });
 
 // ------------------ ELIMINAR CUENTA ------------------
 app.delete("/delete-account/:userId", async (req, res) => {
-  const { userId } = req.params;
+    const {userId} = req.params;
 
-  if (!userId || isNaN(userId)) {
-    return res.status(400).json({ error: "ID de usuario inválido" });
-  }
-
-  try {
-    const neo4jSession = driver.session();
-    await neo4jSession.run("MATCH (u:Usuario {id_usuario: $userId}) DETACH DELETE u", {
-      userId: parseInt(userId),
-    });
-    await neo4jSession.close();
-
-    const result = await pool.query("DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *", [userId]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Usuario no encontrado" });
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({error: "ID de usuario inválido"});
     }
 
-    res.status(200).json({ message: "Usuario eliminado con éxito" });
-  } catch (error) {
-    console.error("❌ Error en DELETE /delete-account:", error);
-    res.status(500).json({ error: "Error en el servidor al intentar eliminar el usuario" });
-  }
+    try {
+        // Eliminar en Neo4j (Grafos)
+        const neo4jSession = driver.session();
+        await neo4jSession.run("MATCH (u:Usuario {id_usuario: $userId}) DETACH DELETE u", {
+            userId: parseInt(userId),
+        });
+        await neo4jSession.close();
+
+        // Eliminar en PostgreSQL. Gracias a ON DELETE CASCADE, 
+        // las publicaciones, likes y comentarios del usuario se eliminan automáticamente.
+        const result = await pool.query("DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *", [userId]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({error: "Usuario no encontrado"});
+        }
+
+        res.status(200).json({message: "Usuario eliminado con éxito"});
+    } catch (error) {
+        console.error("❌ Error en DELETE /delete-account:", error);
+        res.status(500).json({error: "Error en el servidor al intentar eliminar el usuario"});
+    }
 });
 
-// ENDPOINT DE BÚSQUEDA
-app.get("/buscar-test", async (req, res) => {
-  const termino = req.query.q || "";
-  const session = driver.session();
-
-  try {
-    const result = await session.run(
-      `
-      MATCH (l:Liga)
-      WHERE toLower(l.nombre) CONTAINS toLower($termino)
-      RETURN l
-      `,
-      { termino }
-    );
-
-    const records = result.records.map(r => r.get('l').properties);
-    res.json(records);
-  } catch (error) {
-    console.error("❌ Error en /buscar-test:", error);
-    res.status(500).json({ error: "Error en búsqueda de prueba" });
-  } finally {
-    await session.close();
-  }
-});
-
-// Búsqueda ligas, equipos y jugadores
+// ------------------ BÚSQUEDA NEO4J + POSTGRESQL ------------------
 app.get("/buscar", async (req, res) => {
-  const termino = req.query.q || "";
-  const session = driver.session();
+    const termino = req.query.q || "";
+    if (termino.length < 1) {
+        // Devuelve un array vacío si no hay término de búsqueda
+        return res.json({ ligas: [], equipos: [], jugadores: [], usuarios: [] });
+    }
+    
+    // Convertir el término a minúsculas para comparaciones
+    const terminoBusqueda = termino.toLowerCase();
 
-  try {
-    const result = await session.run(
-      `
-      MATCH (l:Liga)
-      WHERE toLower(l.nombre) CONTAINS toLower($termino)
-      WITH collect(l {.*, elementId: elementId(l)}) AS ligas
+    // 1. BÚSQUEDA EN NEO4J (Ligas, Equipos, Jugadores)
+    const neo4jSession = driver.session();
+    let neo4jResults = { ligas: [], equipos: [], jugadores: [] };
 
-      OPTIONAL MATCH (e:Equipo)
-      WHERE toLower(e.nombre) CONTAINS toLower($termino)
-      WITH ligas, collect(e {.*, elementId: elementId(e)}) AS equipos
+    try {
+        const result = await neo4jSession.run(
+            `
+            MATCH (l:Liga)
+            WHERE toLower(l.nombre) CONTAINS toLower($termino)
+            WITH collect(l {.*, elementId: toString(elementId(l)), id_liga: ID(l)}) AS ligas
 
-      OPTIONAL MATCH (j:Jugador)
-      WHERE toLower(j.nombre) CONTAINS toLower($termino)
-      RETURN ligas, equipos, collect(j {.*, elementId: elementId(j)}) AS jugadores
-      `,
-      { termino }
-    );
+            OPTIONAL MATCH (e:Equipo)
+            WHERE toLower(e.nombre) CONTAINS toLower($termino)
+            WITH ligas, collect(e {.*, elementId: toString(elementId(e)), id_equipo: ID(e)}) AS equipos
 
-    const records = result.records[0]?.toObject() || { ligas: [], equipos: [], jugadores: [] };
-    res.json(records);
-  } catch (error) {
-    console.error("❌ Error en /buscar:", error);
-    res.status(500).json({ error: "Error en la búsqueda" });
-  } finally {
-    await session.close();
-  }
+            OPTIONAL MATCH (j:Jugador)
+            WHERE toLower(j.nombre) CONTAINS toLower($termino)
+            RETURN ligas, equipos, collect(j {.*, elementId: toString(elementId(j)), id_jugador: ID(j)}) AS jugadores
+            `,
+            { termino: terminoBusqueda }
+        );
+
+        const records = result.records[0]?.toObject() || {};
+        neo4jResults = {
+            ligas: records.ligas || [],
+            equipos: records.equipos || [],
+            jugadores: records.jugadores || [],
+        };
+        
+    } catch (error) {
+        console.error("❌ Error en búsqueda Neo4j:", error);
+    } finally {
+        await neo4jSession.close();
+    }
+
+    // 2. BÚSQUEDA EN POSTGRESQL (Usuarios)
+    let postgresUsers = [];
+    try {
+        // Busca coincidencias en: nombre, apellido, nombre_usuario o email
+        const userQuery = `
+            SELECT 
+                id_usuario, 
+                nombre, 
+                apellido, 
+                nombre_usuario,
+                foto_perfil,
+                -- Agregamos un 'elementId' temporal para que coincida con el frontend de React Native
+                id_usuario AS "elementId" 
+            FROM usuarios
+            WHERE 
+                LOWER(nombre) LIKE $1 OR 
+                LOWER(apellido) LIKE $1 OR
+                LOWER(nombre_usuario) LIKE $1 OR
+                LOWER(email) LIKE $1
+            LIMIT 10;
+        `;
+        
+        const searchPattern = `%${terminoBusqueda}%`;
+        const result = await pool.query(userQuery, [searchPattern]);
+
+        // Mapear los resultados de Postgres
+        postgresUsers = result.rows.map(user => {
+            let fotoUrl = user.foto_perfil;
+            if (fotoUrl && !fotoUrl.startsWith('http')) {
+                // Reconstruimos la URL de la imagen
+                fotoUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(fotoUrl)}`;
+            }
+
+            return {
+                id_usuario: user.id_usuario,
+                nombre: user.nombre,
+                apellido: user.apellido,
+                nombre_usuario: user.nombre_usuario,
+                foto_perfil: fotoUrl || null,
+                // Convertir la ID de usuario a string para keyExtractor (Como lo hacemos en Neo4j)
+                elementId: user.elementId.toString() 
+            };
+        });
+
+    } catch (error) {
+        console.error("❌ Error en búsqueda PostgreSQL (usuarios):", error);
+    }
+
+    // 3. COMBINAR Y ENVIAR
+    // Enviamos todos los resultados combinados en el formato que el frontend espera
+    res.json({
+        ligas: neo4jResults.ligas,
+        equipos: neo4jResults.equipos,
+        jugadores: neo4jResults.jugadores,
+        usuarios: postgresUsers, // <--- ¡Añadido!
+    });
+});
+
+// ------------------ ENDPOINTS DE DETALLE (Neo4j) ------------------
+
+// 1. OBTENER DETALLE DE LIGA Y SUS EQUIPOS (Neo4j)
+app.get("/liga/:ligaId", async (req, res) => {
+    const {ligaId} = req.params;
+    const session = driver.session();
+    
+    try {
+        // Consultar la liga y sus equipos relacionados
+        const cypher = `
+            MATCH (l:Liga) 
+            WHERE ID(l) = toInteger($id)
+            // Relación: (Equipo)-[:PERTENECE_A]->(Liga)
+            OPTIONAL MATCH (e:Equipo)-[:PERTENECE_A]->(l)
+            RETURN l, collect(e {.*, id_equipo: ID(e)}) AS equipos
+        `;
+        
+        const result = await session.run(cypher, {id: ligaId});
+
+        if (result.records.length === 0) {
+            return res.status(404).json({error: "Liga no encontrada."});
+        }
+
+        const record = result.records[0];
+        const ligaNode = record.get('l').properties;
+        const equipos = record.get('equipos');
+
+        const liga = {
+            ...ligaNode,
+            id_liga: record.get('l').identity.low, // Usamos ID nativo de Neo4j
+            equipos: equipos.map(e => e.properties || e),
+        };
+
+        res.json(liga);
+    } catch (error) {
+        console.error("❌ Error en /liga/:ligaId (Neo4j):", error);
+        res.status(500).json({error: "Error interno del servidor al consultar Neo4j"});
+    } finally {
+        await session.close();
+    }
+});
+
+// 2. OBTENER DETALLE DE EQUIPO Y SUS JUGADORES (Neo4j)
+app.get("/equipo/:equipoId", async (req, res) => {
+    const {equipoId} = req.params;
+    const session = driver.session();
+    
+    try {
+        // Consultar el equipo y sus jugadores relacionados
+        const cypher = `
+            MATCH (e:Equipo) 
+            WHERE ID(e) = toInteger($id)
+            // Relación: (Jugador)-[:PERTENECE_A]->(Equipo)
+            OPTIONAL MATCH (j:Jugador)-[:PERTENECE_A]->(e)
+            RETURN e, collect(j {.*, id_jugador: ID(j)}) AS jugadores
+        `;
+        
+        const result = await session.run(cypher, {id: equipoId});
+
+        if (result.records.length === 0) {
+            return res.status(404).json({error: "Equipo no encontrado."});
+        }
+
+        const record = result.records[0];
+        const equipoNode = record.get('e').properties;
+        const jugadores = record.get('jugadores');
+
+        const equipo = {
+            ...equipoNode,
+            id_equipo: record.get('e').identity.low,
+            jugadores: jugadores.map(j => j.properties || j),
+        };
+
+        res.json(equipo);
+    } catch (error) {
+        console.error("❌ Error en /equipo/:equipoId (Neo4j):", error);
+        res.status(500).json({error: "Error interno del servidor al consultar Neo4j"});
+    } finally {
+        await session.close();
+    }
+});
+
+// 3. OBTENER DETALLE DE JUGADOR (Neo4j)
+app.get("/jugador/:jugadorId", async (req, res) => {
+    const {jugadorId} = req.params;
+    const session = driver.session();
+
+    try {
+        // Consultar solo el nodo del jugador
+        const cypher = `
+            MATCH (j:Jugador) 
+            WHERE ID(j) = toInteger($id) 
+            RETURN j
+        `;
+        
+        const result = await session.run(cypher, {id: jugadorId});
+
+        if (result.records.length === 0) {
+            return res.status(404).json({error: "Jugador no encontrado."});
+        }
+
+        const jugadorNode = result.records[0].get('j').properties;
+        const jugador = {
+            ...jugadorNode,
+            id_jugador: result.records[0].get('j').identity.low,
+        };
+
+        res.json(jugador);
+    } catch (error) {
+        console.error("❌ Error en /jugador/:jugadorId (Neo4j):", error);
+        res.status(500).json({error: "Error interno del servidor al consultar Neo4j"});
+    } finally {
+        await session.close();
+    }
 });
 
 // ------------------ INICIO SERVIDOR ------------------
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);
+    console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);
 });

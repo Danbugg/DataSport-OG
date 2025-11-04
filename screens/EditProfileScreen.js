@@ -12,6 +12,9 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker"; 
 
+// ✅ CORREGIDO: Usa localhost (porque estás usando celular por USB + adb reverse)
+const API_BASE_URL = "http://localhost:3000"; 
+
 export default function EditProfileScreen({ route, navigation }) {
   const { userId, userProfile } = route.params;
 
@@ -35,7 +38,7 @@ export default function EditProfileScreen({ route, navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 1,
+      quality: 0.7,
     });
 
     if (!result.canceled) {
@@ -46,29 +49,71 @@ export default function EditProfileScreen({ route, navigation }) {
   const handleSave = async () => {
     setLoading(true);
 
+    const isNewImage = newPhotoUri && !newPhotoUri.startsWith("http");
+    let endpoint = `${API_BASE_URL}/profile/${userId}`;
+    let method = "PUT";
+    let headers = {};
+    let body;
+
+    if (isNewImage) {
+      const formData = new FormData();
+      formData.append("descripcion", newDescription);
+
+      const filename = newPhotoUri.split("/").pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image`;
+
+      formData.append("profileImage", {
+        uri: newPhotoUri,
+        type: type,
+        name: filename,
+      });
+      body = formData;
+    } else {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify({
+        descripcion: newDescription,
+        foto_perfil: newPhotoUri || userProfile.foto_perfil,
+      });
+    }
+
     try {
-      const response = await fetch(`http://localhost:3000/profile/${userId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          foto_perfil: newPhotoUri,
-          descripcion: newDescription,
-        }),
+      const response = await fetch(endpoint, {
+        method: method,
+        headers: headers,
+        body: body,
       });
 
       const data = await response.json();
 
       if (response.ok) {
         Alert.alert("Éxito", "Perfil actualizado correctamente.");
-        navigation.navigate("HomeScreen", { userId, userProfile: { ...userProfile, foto_perfil: newPhotoUri, descripcion: newDescription } });
+
+        const finalPhotoUri = data.user.foto_perfil;
+
+        const updatedProfile = {
+          ...userProfile,
+          foto_perfil: finalPhotoUri,
+          descripcion: newDescription,
+        };
+
+        navigation.navigate("MainTabs", {
+          screen: "Perfil",
+          params: {
+            userId,
+            userProfile: updatedProfile,
+          },
+        });
       } else {
-        Alert.alert("Error", data.error || "No se pudo actualizar el perfil.");
+        console.error("Error del servidor al guardar:", data);
+        Alert.alert("Error del Servidor", data.error || "No se pudo actualizar el perfil.");
       }
     } catch (error) {
       console.error("Error al actualizar el perfil:", error);
-      Alert.alert("Error", "Error de conexión al servidor.");
+      Alert.alert(
+        "Error de Conexión",
+        "Error de red. Asegúrate de que el servidor esté activo en http://localhost:3000."
+      );
     } finally {
       setLoading(false);
     }
@@ -82,8 +127,11 @@ export default function EditProfileScreen({ route, navigation }) {
 
           <TouchableOpacity onPress={pickImage}>
             <Image
-              source={{ uri: newPhotoUri || 'https://i.imgur.com/k6KxI1x.png' }}
+              source={{ uri: newPhotoUri || "https://i.imgur.com/k6KxI1x.png" }}
               style={styles.profileImage}
+              onError={(e) =>
+                console.log("❌ Error al cargar imagen:", newPhotoUri, e.nativeEvent.error)
+              }
             />
             <View style={styles.cameraIconContainer}>
               <Text style={styles.cameraIcon}>📷</Text>
@@ -91,7 +139,6 @@ export default function EditProfileScreen({ route, navigation }) {
           </TouchableOpacity>
 
           <Text style={styles.username}>{userProfile.nombre_usuario}</Text>
-         
 
           <TextInput
             style={styles.descriptionInput}
@@ -170,11 +217,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
     marginTop: 10,
-  },
-  notEditableText: {
-    fontSize: 12,
-    color: "#999",
-    marginBottom: 20,
   },
   descriptionInput: {
     width: "100%",
