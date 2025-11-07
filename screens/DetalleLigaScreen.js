@@ -1,49 +1,37 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  FlatList,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-} from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 
-export default function DetalleLigaScreen() {
+const API_BASE_URL = "http://localhost:3000";
+
+export default function DetalleLigaScreen({ route }) {
   const navigation = useNavigation();
-  const route = useRoute();
-  const { itemId, itemData } = route.params; 
-
-  const [liga, setLiga] = useState(null);
+  const { itemId, itemData } = route.params || {};
+  const [equipos, setEquipos] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchLigaDetalle();
-  }, [itemId]);
+    const cargarEquipos = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/ligas/${itemId}/equipos`);
+        const data = await response.json();
 
-  const fetchLigaDetalle = async () => {
-    setLoading(true);
-    try {
-      
-      const response = await fetch(`http://localhost:3000/liga/${itemId}`);
-      const data = await response.json();
+        // 🔹 Convierte id_equipo.low → número normal
+        const equiposNormalizados = data.equipos.map((e) => ({
+          ...e,
+          id_equipo: e.id_equipo?.low ?? e.id_equipo,
+        }));
 
-      if (response.ok) {
-        setLiga(data);
-      } else {
-        Alert.alert("Error", data.error || "No se encontró la liga.");
-        navigation.goBack();
+        setEquipos(equiposNormalizados);
+      } catch (error) {
+        console.error("Error cargando equipos:", error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error al cargar detalle de liga:", error);
-      Alert.alert("Error de conexión", "No se pudo conectar con el servidor API.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+
+    cargarEquipos();
+  }, [itemId]);
 
   const handleEquipoPress = (equipo) => {
     navigation.navigate("DetalleEquipoScreen", {
@@ -52,127 +40,78 @@ export default function DetalleLigaScreen() {
     });
   };
 
-  const renderEquipo = ({ item }) => (
-    <TouchableOpacity
-      style={styles.equipoItem}
-      onPress={() => handleEquipoPress(item)}
-    >
-      <Text style={styles.equipoNombre}>{item.nombre}</Text>
-      <Ionicons name="chevron-forward-outline" size={20} color="#0033ff" />
-    </TouchableOpacity>
-  );
-
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0033ff" />
-        <Text style={styles.loadingText}>Cargando datos de la Liga...</Text>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#00aaff" />
       </View>
     );
   }
 
-  if (!liga) {
+  if (equipos.length === 0) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Datos no disponibles.</Text>
+      <View style={styles.centered}>
+        <Text style={{ color: "#fff" }}>No hay equipos registrados.</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-      >
-        <Ionicons name="arrow-back" size={24} color="#fff" />
-      </TouchableOpacity>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{liga.nombre}</Text>
-          <Text style={styles.headerSubtitle}>
-            Detalles de la temporada actual...
-          </Text>
-        </View>
-
-        
-        <Text style={styles.sectionTitle}>Equipos de la Liga</Text>
-
-        <FlatList
-          data={liga.equipos}
-          keyExtractor={(item) => item.id_equipo.toString()}
-          renderItem={renderEquipo}
-          scrollEnabled={false}
-          ListEmptyComponent={() => (
-            <Text style={styles.emptyText}>
-              No se encontraron equipos en esta liga.
-            </Text>
-          )}
-        />
-      </ScrollView>
+      <Text style={styles.title}>{itemData?.nombre || "Equipos"}</Text>
+      <FlatList
+        data={equipos}
+        keyExtractor={(item) => item.elementId}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.item}
+            onPress={() => handleEquipoPress(item)}
+          >
+            <Text style={styles.itemText}>{item.nombre}</Text>
+            {item.ciudad && (
+              <Text style={styles.subText}>Ciudad: {item.ciudad}</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000" },
-  loadingContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+    padding: 16,
+  },
+  centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#000",
   },
-  loadingText: { color: "#fff", marginTop: 10 },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#000",
-  },
-  errorText: { color: "red", fontSize: 16 },
-  backButton: {
-    position: "absolute",
-    top: 50,
-    left: 10,
-    zIndex: 10,
-    padding: 10,
-  },
-  scrollContent: {
-    paddingTop: 100,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  header: {
-    marginBottom: 30,
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
-    paddingBottom: 15,
-  },
-  headerTitle: {
-    fontSize: 28,
+  title: {
+    fontSize: 22,
+    color: "#ff0000",
     fontWeight: "bold",
-    color: "#0033ff",
-    textAlign: "center",
-  },
-  headerSubtitle: { fontSize: 14, color: "#aaa", marginTop: 5 },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
     marginBottom: 15,
-    marginTop: 10,
   },
-  equipoItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#222",
+  item: {
+    backgroundColor: "#1a1a1a",
+    padding: 15,
+    borderRadius: 8,
+    borderLeftColor: "#00aaff",
+    borderLeftWidth: 3,
+    marginBottom: 10,
   },
-  equipoNombre: { color: "#fff", fontSize: 16, fontWeight: "500" },
-  emptyText: { color: "#999", textAlign: "center", padding: 20 },
+  itemText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  subText: {
+    color: "#aaa",
+    fontSize: 14,
+    marginTop: 4,
+  },
 });

@@ -844,6 +844,158 @@ app.get("/buscar", async (req, res) => {
     });
 });
 
+// ------------------ SEGUIMIENTO DE USUARIOS (NEO4J) ------------------
+
+// POST: Seguir a un usuario
+app.post("/follow/:followedId", async (req, res) => {
+    const { followedId } = req.params;
+    const followerId = safeParseInt(req.body.followerId);
+
+    console.log(`[FOLLOW] Intento de seguir: Follower ${followerId} -> Followed ${followedId}`);
+
+    if (!followerId || !followedId) {
+        return res.status(400).json({ error: "IDs de usuario inválidos." });
+    }
+
+    const session = driver.session();
+    
+    try {
+        // Crear la relación SIGUE_A en Neo4j
+        await session.run(
+            `MATCH (follower:Usuario {id_usuario: $followerId})
+             MATCH (followed:Usuario {id_usuario: $followedId})
+             MERGE (follower)-[:SIGUE_A]->(followed)
+             RETURN follower, followed`,
+            { 
+                followerId: parseInt(followerId), 
+                followedId: parseInt(followedId) 
+            }
+        );
+        
+        console.log(`✅ Usuario ${followerId} ahora sigue a ${followedId}`);
+        res.status(200).json({ message: "Usuario seguido exitosamente" });
+        
+    } catch (error) {
+        console.error("❌ Error al seguir usuario en Neo4j:", error);
+        res.status(500).json({ error: "Error al seguir usuario" });
+    } finally {
+        await session.close();
+    }
+});
+
+// DELETE: Dejar de seguir a un usuario
+app.delete("/unfollow/:followedId", async (req, res) => {
+    const { followedId } = req.params;
+    const followerId = safeParseInt(req.body.followerId);
+
+    console.log(`[UNFOLLOW] Intento de dejar de seguir: Follower ${followerId} -> Followed ${followedId}`);
+
+    if (!followerId || !followedId) {
+        return res.status(400).json({ error: "IDs de usuario inválidos." });
+    }
+
+    const session = driver.session();
+    
+    try {
+        // Eliminar la relación SIGUE_A
+        const result = await session.run(
+            `MATCH (follower:Usuario {id_usuario: $followerId})-[r:SIGUE_A]->(followed:Usuario {id_usuario: $followedId})
+             DELETE r
+             RETURN count(r) as deleted`,
+            { 
+                followerId: parseInt(followerId), 
+                followedId: parseInt(followedId) 
+            }
+        );
+        
+        const deletedCount = result.records[0]?.get('deleted').toNumber() || 0;
+        
+        if (deletedCount === 0) {
+            return res.status(404).json({ error: "No se encontró la relación de seguimiento." });
+        }
+        
+        console.log(`✅ Usuario ${followerId} dejó de seguir a ${followedId}`);
+        res.status(200).json({ message: "Dejaste de seguir al usuario" });
+        
+    } catch (error) {
+        console.error("❌ Error al dejar de seguir en Neo4j:", error);
+        res.status(500).json({ error: "Error al dejar de seguir" });
+    } finally {
+        await session.close();
+    }
+});
+
+// GET: Verificar si un usuario sigue a otro
+app.get("/isFollowing/:followedId", async (req, res) => {
+    const { followedId } = req.params;
+    const followerId = safeParseInt(req.query.followerId);
+
+    if (!followerId || !followedId) {
+        return res.status(400).json({ error: "IDs de usuario inválidos." });
+    }
+
+    const session = driver.session();
+    
+    try {
+        const result = await session.run(
+            `MATCH (follower:Usuario {id_usuario: $followerId})
+             OPTIONAL MATCH (follower)-[r:SIGUE_A]->(followed:Usuario {id_usuario: $followedId})
+             RETURN r IS NOT NULL AS isFollowing`,
+            { 
+                followerId: parseInt(followerId), 
+                followedId: parseInt(followedId) 
+            }
+        );
+        
+        const isFollowing = result.records[0]?.get('isFollowing') || false;
+        
+        console.log(`[CHECK FOLLOW] Usuario ${followerId} ${isFollowing ? 'SÍ' : 'NO'} sigue a ${followedId}`);
+        res.status(200).json({ isFollowing });
+        
+    } catch (error) {
+        console.error("❌ Error al verificar seguimiento en Neo4j:", error);
+        res.status(500).json({ error: "Error al verificar seguimiento" });
+    } finally {
+        await session.close();
+    }
+});
+
+// GET: Obtener estadísticas de seguimiento (seguidores y seguidos)
+app.get("/profile/:userId/followStats", async (req, res) => {
+    const { userId } = req.params;
+
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({ error: "ID de usuario inválido" });
+    }
+
+    const session = driver.session();
+    
+    try {
+        const result = await session.run(
+            `MATCH (u:Usuario {id_usuario: $userId})
+             OPTIONAL MATCH (u)<-[:SIGUE_A]-(follower)
+             WITH u, count(DISTINCT follower) as seguidores
+             OPTIONAL MATCH (u)-[:SIGUE_A]->(followed)
+             RETURN seguidores, count(DISTINCT followed) as siguiendo`,
+            { userId: parseInt(userId) }
+        );
+        
+        const record = result.records[0];
+        const stats = {
+            seguidores: record?.get('seguidores').toNumber() || 0,
+            siguiendo: record?.get('siguiendo').toNumber() || 0
+        };
+        
+        res.status(200).json(stats);
+        
+    } catch (error) {
+        console.error("❌ Error al obtener estadísticas de seguimiento:", error);
+        res.status(500).json({ error: "Error al obtener estadísticas" });
+    } finally {
+        await session.close();
+    }
+});
+
 // ------------------ ENDPOINTS DE DETALLE (Neo4j) ------------------
 
 // 1. OBTENER DETALLE DE LIGA Y SUS EQUIPOS (Neo4j)
@@ -959,6 +1111,8 @@ app.get("/jugador/:jugadorId", async (req, res) => {
         await session.close();
     }
 });
+
+
 
 // ------------------ INICIO SERVIDOR ------------------
 app.listen(PORT, "0.0.0.0", () => {

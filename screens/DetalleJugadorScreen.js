@@ -1,45 +1,40 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
+  Image,
   ActivityIndicator,
   ScrollView,
-  TouchableOpacity,
-  Alert,
-  Image,
+  SafeAreaView,
 } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
 
-export default function DetalleJugadorScreen() {
-  const navigation = useNavigation();
-  const route = useRoute();
-  const { itemId } = route.params;
+const API_BASE_URL = "http://localhost:3000";
 
-  const [jugador, setJugador] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default function DetalleJugadorScreen({ route }) {
+  const { itemId, itemData } = route.params || {};
+  const [jugador, setJugador] = useState(itemData || null);
+  const [loading, setLoading] = useState(!itemData);
 
   useEffect(() => {
-    fetchJugadorDetalle();
+    if (!itemData && itemId) {
+      cargarJugador();
+    }
   }, [itemId]);
 
-  const fetchJugadorDetalle = async () => {
-    setLoading(true);
+  const cargarJugador = async () => {
     try {
-      // 🔹 Usa tu IP local si estás en un dispositivo físico o emulador
-      const response = await fetch(`http://localhost:3000/jugador/${itemId}`);
-      const data = await response.json();
+      setLoading(true);
+      const res = await fetch(`${API_BASE_URL}/jugadores/${itemId}`);
+      const data = await res.json();
 
-      if (response.ok) {
-        setJugador(data);
-      } else {
-        Alert.alert("Error", data.error || "No se encontró el jugador.");
-        navigation.goBack();
+      if (data.dorsal && typeof data.dorsal === "object") {
+        data.dorsal = data.dorsal.low;
       }
+
+      setJugador(data);
     } catch (error) {
-      console.error("Error al cargar detalle de jugador:", error);
-      Alert.alert("Error de Conexión", "No se pudo conectar con el servidor API.");
+      console.error("Error al cargar jugador:", error);
     } finally {
       setLoading(false);
     }
@@ -47,9 +42,9 @@ export default function DetalleJugadorScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0033ff" />
-        <Text style={styles.loadingText}>Cargando datos del Jugador...</Text>
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#00aaff" />
+        <Text style={{ color: "#fff", marginTop: 10 }}>Cargando jugador...</Text>
       </View>
     );
   }
@@ -57,82 +52,109 @@ export default function DetalleJugadorScreen() {
   if (!jugador) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Datos no disponibles.</Text>
+        <Text style={styles.errorText}>No se pudo cargar la información del jugador.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Ionicons name="arrow-back" size={24} color="#fff" />
-      </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView contentContainerStyle={styles.container}>
+        {jugador.foto && (
+          <View style={styles.fotoContainer}>
+            <Image source={{ uri: jugador.foto }} style={styles.fotoJugador} />
+          </View>
+        )}
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Foto y Nombre del Jugador */}
-        <View style={styles.header}>
-          {jugador.foto ? (
-            <Image source={{ uri: jugador.foto }} style={styles.jugadorFoto} />
-          ) : (
-            <View style={styles.jugadorPlaceholder} />
-          )}
-          <Text style={styles.headerTitle}>
-            {jugador.nombre} {jugador.apellido}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            Posición: {jugador.posicion || "N/A"}
+        <Text style={styles.nombre}>{jugador.nombre}</Text>
+
+        <View style={styles.infoBox}>
+          <Text style={styles.label}>Nacionalidad:</Text>
+          <Text style={styles.valor}>{jugador.nacionalidad || "Desconocida"}</Text>
+        </View>
+
+        <View style={styles.infoBox}>
+          <Text style={styles.label}>Posición:</Text>
+          <Text style={styles.valor}>{jugador.posicion || "Sin posición"}</Text>
+        </View>
+
+        <View style={styles.infoBox}>
+          <Text style={styles.label}>Dorsal:</Text>
+          <Text style={styles.valor}>
+            {jugador.dorsal
+              ? typeof jugador.dorsal === "object"
+                ? jugador.dorsal.low
+                : jugador.dorsal
+              : "N/A"}
           </Text>
         </View>
 
-        {/* Detalles Adicionales */}
-        <View style={styles.detailCard}>
-          <Text style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Nacionalidad: </Text>
-            <Text style={styles.detailValue}>{jugador.nacionalidad || "N/A"}</Text>
-          </Text>
-
-          <Text style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Fecha de Nacimiento: </Text>
-            <Text style={styles.detailValue}>
-              {jugador.fecha_nacimiento
-                ? new Date(jugador.fecha_nacimiento).toLocaleDateString()
-                : "N/A"}
-            </Text>
-          </Text>
-
-          <Text style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Altura: </Text>
-            <Text style={styles.detailValue}>
-              {jugador.altura ? `${jugador.altura} m` : "N/A"}
-            </Text>
-          </Text>
-
-          <Text style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Peso: </Text>
-            <Text style={styles.detailValue}>
-              {jugador.peso ? `${jugador.peso} kg` : "N/A"}
-            </Text>
-          </Text>
-        </View>
+        {jugador.equipo && (
+          <View style={styles.infoBox}>
+            <Text style={styles.label}>Equipo actual:</Text>
+            <Text style={styles.valor}>{jugador.equipo}</Text>
+          </View>
+        )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: "#000",
   },
-  loadingContainer: {
+  container: {
+    padding: 20,
+    alignItems: "center",
+    backgroundColor: "#000",
+    flexGrow: 1,
+    paddingTop: 70, // espacio superior
+  },
+  loaderContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#000",
   },
-  loadingText: {
+  fotoContainer: {
+    borderWidth: 2,
+    borderColor: "#00aaff",
+    padding: 5,
+    borderRadius: 10, // 👈 borde cuadrado
+    marginBottom: 20,
+  },
+  fotoJugador: {
+    width: 160,
+    height: 160,
+    borderRadius: 10, // 👈 ahora cuadrada
+    resizeMode: "contain", // evita que se corte el rostro
+  },
+  nombre: {
+    fontSize: 26,
+    fontWeight: "bold",
     color: "#fff",
-    marginTop: 10,
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  infoBox: {
+    width: "100%",
+    marginBottom: 10,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 10,
+    padding: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: "#00aaff",
+  },
+  label: {
+    color: "#ff0000",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  valor: {
+    color: "#fff",
+    fontSize: 16,
   },
   errorContainer: {
     flex: 1,
@@ -141,75 +163,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   errorText: {
-    color: "red",
-    fontSize: 16,
-  },
-  backButton: {
-    position: "absolute",
-    top: 50,
-    left: 10,
-    zIndex: 10,
-    padding: 10,
-  },
-  scrollContent: {
-    paddingTop: 100,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    alignItems: "center",
-  },
-  header: {
-    marginBottom: 30,
-    alignItems: "center",
-    paddingBottom: 15,
-  },
-  jugadorFoto: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    borderWidth: 3,
-    borderColor: "#0033ff",
-    marginBottom: 15,
-  },
-  jugadorPlaceholder: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: "#444",
-    marginBottom: 15,
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#fff",
-    textAlign: "center",
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: "#0033ff",
-    marginTop: 5,
-  },
-  detailCard: {
-    width: "100%",
-    backgroundColor: "#111",
-    borderRadius: 15,
-    padding: 20,
-    shadowColor: "#0033ff",
-    shadowOpacity: 0.5,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  detailRow: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#222",
-  },
-  detailLabel: {
-    fontWeight: "bold",
-    color: "#aaa",
-    fontSize: 16,
-  },
-  detailValue: {
-    color: "#fff",
-    fontSize: 16,
+    color: "#ff5555",
+    fontSize: 18,
   },
 });

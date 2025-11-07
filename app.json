@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "curso-react-native-metacritic-app",
-    "slug": "curso-react-native-metacritic-app",
+    "name": "DataSport",
+    "slug": "DataSport",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

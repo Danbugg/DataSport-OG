@@ -12,8 +12,7 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
-const API_BASE_URL = "http://localhost:3000"; 
-// ------------------------------------
+const API_BASE_URL = "http://localhost:3000";
 
 export default function BuscadorScreen({ route }) {
     const navigation = useNavigation();
@@ -97,7 +96,7 @@ export default function BuscadorScreen({ route }) {
             onPress={() => handlePress(item, "jugador")}
         >
             {item.foto ? (
-                <Image source={{ uri: item.foto }} style={styles.jugadorImagen} /> 
+                <Image source={{ uri: item.foto }} style={styles.jugadorImagen} />
             ) : (
                 <View style={styles.jugadorPlaceholder} />
             )}
@@ -110,14 +109,14 @@ export default function BuscadorScreen({ route }) {
             style={styles.itemJugador}
             onPress={() => handlePress(item, "usuario")}
         >
-            {item.foto_perfil ? ( 
-                <Image source={{ uri: item.foto_perfil }} style={styles.jugadorImagen} /> 
+            {item.foto_perfil ? (
+                <Image source={{ uri: item.foto_perfil }} style={styles.jugadorImagen} />
             ) : (
                 <View style={styles.jugadorPlaceholder} />
             )}
             <Text style={styles.itemText}>
                 {item.nombre} {item.apellido} (@{item.nombre_usuario})
-            </Text> 
+            </Text>
         </TouchableOpacity>
     );
 
@@ -199,78 +198,84 @@ export default function BuscadorScreen({ route }) {
 }
 
 const styles = StyleSheet.create({
-    container: { 
-        flex: 1, 
-        paddingHorizontal: 16, 
-        backgroundColor: "#000", 
-        paddingTop: 40, 
+    container: {
+        flex: 1,
+        paddingHorizontal: 16,
+        backgroundColor: "#000",
+        paddingTop: 40,
     },
     input: {
         height: 45,
-        borderColor: "#00aaff", 
+        borderColor: "#00aaff",
         borderWidth: 1,
-        borderRadius: 25, 
+        borderRadius: 25,
         paddingHorizontal: 15,
         marginBottom: 20,
         color: "#fff",
-        backgroundColor: '#1a1a1a', 
+        backgroundColor: "#1a1a1a",
         fontSize: 16,
     },
     scrollContent: {
-        paddingBottom: 20, 
+        paddingBottom: 20,
     },
-    section: { 
-        marginBottom: 5 
+    section: {
+        marginBottom: 5,
     },
-    title: { 
-        fontSize: 18, 
-        fontWeight: "bold", 
-        marginBottom: 5, 
-        color: "#ff0000", 
+    title: {
+        fontSize: 18,
+        fontWeight: "bold",
+        marginBottom: 5,
+        color: "#ff0000",
         marginTop: 15,
         paddingLeft: 5,
     },
     item: {
         padding: 12,
-        backgroundColor: '#1a1a1a', 
+        backgroundColor: "#1a1a1a",
         marginBottom: 4,
         borderRadius: 8,
         borderLeftWidth: 3,
-        borderLeftColor: '#00aaff',
+        borderLeftColor: "#00aaff",
     },
-    itemText: { 
-        color: "#eee", 
+    itemText: {
+        color: "#eee",
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: "500",
     },
     itemJugador: {
         flexDirection: "row",
         alignItems: "center",
         padding: 10,
-        backgroundColor: '#1a1a1a', 
+        backgroundColor: "#1a1a1a",
         marginBottom: 4,
         borderRadius: 8,
         borderLeftWidth: 3,
-        borderLeftColor: '#00aaff',
+        borderLeftColor: "#00aaff",
     },
-    jugadorImagen: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        marginRight: 15,
-        borderWidth: 1,
-        borderColor: '#fff',
-    },
-    jugadorPlaceholder: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        marginRight: 15,
-        backgroundColor: "#333",
-    },
+jugadorImagen: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 15,
+    borderWidth: 1,
+    borderColor: '#00aaff',
+    resizeMode: 'contain', // 🔹 muestra la imagen completa sin cortar
+    backgroundColor: '#111', // 🔹 relleno si la imagen no cubre todo
+},
+
+jugadorPlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 15,
+    backgroundColor: "#333",
+    borderWidth: 1,
+    borderColor: '#00aaff',
+},
+
     noResultsText: {
-        color: '#999',
-        textAlign: 'center',
+        color: "#999",
+        textAlign: "center",
         marginTop: 20,
         fontSize: 16,
     },
