@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
     View,
     Text,
@@ -11,9 +12,8 @@ import {
 import axios from "axios";
 
 // La clave API permanece aquí
-const API_KEY = "b9a9742ac0bbe81d1c226b95c758b058"; 
+const API_KEY = "39148556504f43abcba1a1b613f70c05"; 
 
-// FUNCIÓN CON EMOTICONES RESTAURADOS (Sin cambios)
 const getEventIcon = (type, detail) => {
     switch (type) {
         case 'Goal':
@@ -78,9 +78,7 @@ const LineupPlayerItem = ({ player }) => {
 };
 // ---------------------------------------------------------
 
-// --- NUEVO/MODIFICADO COMPONENTE: Vista de Estadísticas ---
-
-// Mapeo de estadísticas para orden y nombre de visualización
+// --- COMPONENTE: Vista de Estadísticas (Se mantiene) ---
 const STATS_MAP = [
     { key: 'Ball Possession', name: 'Posesión', unit: '%' },
     { key: 'Shots on Goal', name: 'Tiros a Puerta', unit: '' },
@@ -96,7 +94,6 @@ const STATS_MAP = [
     { key: 'Passes %', name: 'Precisión Pases', unit: '%' },
 ];
 
-// Función para limpiar el valor (ej. quitar el '%')
 const formatStatValue = (value) => {
     if (typeof value === 'string' && value.includes('%')) {
         return value.replace('%', '');
@@ -109,11 +106,9 @@ const StatisticsView = ({ statsData, homeTeam, awayTeam }) => {
         return <Text style={styles.emptyText}>Estadísticas no disponibles.</Text>;
     }
 
-    // Encuentra los datos de estadísticas para cada equipo
     const homeStatsRaw = statsData.find(s => s.team.id === homeTeam.id)?.statistics || [];
     const awayStatsRaw = statsData.find(s => s.team.id === awayTeam.id)?.statistics || [];
 
-    // Convierte el array de estadísticas en Mapas para un acceso rápido por "type"
     const homeStats = new Map(homeStatsRaw.map(stat => [stat.type, formatStatValue(stat.value)]));
     const awayStats = new Map(awayStatsRaw.map(stat => [stat.type, formatStatValue(stat.value)]));
 
@@ -131,17 +126,14 @@ const StatisticsView = ({ statsData, homeTeam, awayTeam }) => {
                 const homeValue = homeStats.get(key) || 0;
                 const awayValue = awayStats.get(key) || 0;
                 
-                // Lógica para las barras de progreso (Porcentaje de posesión o distribución de tiros)
                 const isPercentageStat = unit === '%';
                 let homePercent = 0;
                 let awayPercent = 0;
                 
                 if (isPercentageStat) {
-                    // Si es porcentaje, usamos el valor directamente
                     homePercent = Number(homeValue);
                     awayPercent = Number(awayValue);
                 } else {
-                    // Para valores absolutos (tiros, etc.), calculamos la distribución
                     const total = Number(homeValue) + Number(awayValue);
                     if (total > 0) {
                         homePercent = (Number(homeValue) / total) * 100;
@@ -149,7 +141,6 @@ const StatisticsView = ({ statsData, homeTeam, awayTeam }) => {
                     }
                 }
                 
-                // Solo mostramos la barra si es relevante (Posesión o Tiros Totales)
                 const showBar = isPercentageStat || key === 'Total Shots';
                 
                 return (
@@ -191,7 +182,6 @@ export default function PartidoScreen({ route, navigation }) {
     const { matchId } = route.params;
     const [match, setMatch] = useState(null);
     const [loading, setLoading] = useState(true);
-    // Cambiado: Ahora cargamos estadísticas
     const [statistics, setStatistics] = useState(null); 
     const [tab, setTab] = useState('detalles'); // Estado para las pestañas
 
@@ -219,7 +209,6 @@ export default function PartidoScreen({ route, navigation }) {
                         `https://v3.football.api-sports.io/fixtures/statistics?fixture=${matchId}`,
                         { headers: { "x-apisports-key": API_KEY } }
                     );
-                    // Las estadísticas suelen venir anidadas directamente en response
                     setStatistics(resStats.data.response);
                 }
 
@@ -238,8 +227,9 @@ export default function PartidoScreen({ route, navigation }) {
             <View style={styles.center}>
                 <ActivityIndicator size="large" color="#ff0000" />
                 <Text style={styles.loadingText}>Cargando datos del partido...</Text>
+                {/* 1. Botón Volver en estado de carga (Corregido) */}
                 <TouchableOpacity
-                    style={styles.backButton}
+                    style={styles.backButtonCenter} 
                     onPress={() => navigation.goBack()}
                 >
                     <Text style={styles.backText}>← Volver</Text>
@@ -252,8 +242,9 @@ export default function PartidoScreen({ route, navigation }) {
         return (
             <View style={styles.center}>
                 <Text style={styles.emptyText}>No se encontró el partido.</Text>
+                {/* 2. Botón Volver en estado de error/vacío (Corregido) */}
                 <TouchableOpacity
-                    style={styles.backButton}
+                    style={styles.backButtonCenter} 
                     onPress={() => navigation.goBack()}
                 >
                     <Text style={styles.backText}>← Volver</Text>
@@ -283,9 +274,9 @@ export default function PartidoScreen({ route, navigation }) {
         <View style={{ flex: 1, backgroundColor: "#000" }}>
             <ScrollView contentContainerStyle={styles.container}>
                 
-                {/* Botón Volver */}
+                {/* 3. Botón Volver en ScrollView (Corregido) */}
                 <TouchableOpacity
-                    style={styles.backButton}
+                    style={styles.backButtonTop} 
                     onPress={() => navigation.goBack()}
                 >
                     <Text style={styles.backText}>← Volver</Text>
@@ -331,7 +322,7 @@ export default function PartidoScreen({ route, navigation }) {
                         <Text style={tabStyles.tabText}>Detalles</Text>
                     </TouchableOpacity>
                     
-                    {/* CAMBIADO: Estadísticas */}
+                    {/* Estadísticas */}
                     <TouchableOpacity 
                         style={[tabStyles.tab, tab === 'estadisticas' && tabStyles.activeTab]}
                         onPress={() => setTab('estadisticas')}
@@ -425,7 +416,7 @@ export default function PartidoScreen({ route, navigation }) {
                 {/* --- CONTENIDO DE ESTADÍSTICAS (NUEVO) --- */}
                 {tab === 'estadisticas' && (
                     <View style={styles.dataBox}>
-                         <Text style={styles.boxTitle}>Estadísticas del Partido</Text>
+                          <Text style={styles.boxTitle}>Estadísticas del Partido</Text>
                          <StatisticsView 
                             statsData={statistics} 
                             homeTeam={homeTeam} 
@@ -568,7 +559,7 @@ const statStyles = StyleSheet.create({
 });
 // -----------------------------------------------------------------
 
-// --- ESTILOS GENERALES Y DE TABS (Se mantienen) ---
+// --- ESTILOS GENERALES Y DE TABS (Actualizados) ---
 const tabStyles = StyleSheet.create({
     tabContainer: {
         flexDirection: 'row',
@@ -613,17 +604,31 @@ const styles = StyleSheet.create({
         fontSize: 18,
         textAlign: 'center',
     },
-    backButton: {
-        backgroundColor: "#222",
-        paddingVertical: 8,
-        paddingHorizontal: 15,
-        borderRadius: 25,
-        alignSelf: "flex-start",
+    // 1. Estilo para el botón de Volver en la parte superior (Scrollview)
+    backButtonTop: {
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderColor: '#00aaff', // Azul brillante
+        borderRadius: 20,
+        alignSelf: "flex-start", // Alinea a la izquierda en el ScrollView
         marginBottom: 20,
     },
+    // 2. Estilo para el botón de Volver cuando está centrado (Loading/Empty)
+    backButtonCenter: {
+        marginTop: 30,
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderColor: '#00aaff', // Azul brillante
+        borderRadius: 20,
+    },
     backText: {
-        color: "#00aaff",
+        color: "#00aaff", // Color del texto igual al del borde
         fontWeight: "bold",
+        fontSize: 16,
     },
     header: {
         alignItems: 'center',
