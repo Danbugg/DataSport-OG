@@ -8,13 +8,12 @@ import {
     FlatList,
     TextInput,
     TouchableOpacity,
-    KeyboardAvoidingView, // Para evitar que el teclado oculte el input
+    KeyboardAvoidingView,
     Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Usaremos la misma URL base
 const API_BASE_URL = "http://localhost:3000"; 
 
 // --- Componente para mostrar un solo comentario ---
@@ -36,7 +35,6 @@ const CommentItem = ({ comment }) => {
 
 // --- Componente Principal ---
 export default function CommentsScreen({ route, navigation }) {
-    // Obtenemos el postId de los parámetros de la ruta
     const { postId } = route.params;
 
     const [comments, setComments] = useState([]);
@@ -45,7 +43,6 @@ export default function CommentsScreen({ route, navigation }) {
     const [isSending, setIsSending] = useState(false);
     const [currentUserId, setCurrentUserId] = useState(null);
 
-    // 1. Carga inicial de datos
     useEffect(() => {
         const loadInitialData = async () => {
             const userId = await AsyncStorage.getItem("userId");
@@ -55,7 +52,6 @@ export default function CommentsScreen({ route, navigation }) {
         loadInitialData();
     }, []);
 
-    // 2. Función para obtener comentarios
     const fetchComments = useCallback(async () => {
         setLoading(true);
         try {
@@ -63,7 +59,6 @@ export default function CommentsScreen({ route, navigation }) {
 
             if (response.ok) {
                 const data = await response.json();
-                // Asumimos que el backend devuelve un array de comentarios
                 setComments(data.comments || []); 
             } else {
                 Alert.alert("Error", "No se pudieron cargar los comentarios.");
@@ -77,7 +72,6 @@ export default function CommentsScreen({ route, navigation }) {
         }
     }, [postId]);
 
-    // 3. Función para enviar un nuevo comentario
     const handleSendComment = async () => {
         if (!currentUserId) {
             Alert.alert("Error", "Debes iniciar sesión para comentar.");
@@ -107,12 +101,8 @@ export default function CommentsScreen({ route, navigation }) {
                 Alert.alert("Éxito", "Comentario publicado.");
                 setNewComment('');
                 
-                // Opción 1 (Más rápida): Añadir el comentario devuelto localmente
-                // Necesitarás que tu backend devuelva el comentario con el ID y el nombre de usuario
-                setComments(prevComments => [data.newComment, ...prevComments]); 
-
-                // Opción 2 (Más segura): Recargar todos los comentarios
-                // fetchComments(); 
+                // Añadir el comentario al final del array (aparecerá abajo)
+                setComments(prevComments => [...prevComments, data.newComment]); 
 
             } else {
                 Alert.alert("Error", "Error al enviar el comentario.");
@@ -126,10 +116,8 @@ export default function CommentsScreen({ route, navigation }) {
     };
 
     return (
-        <KeyboardAvoidingView 
-            style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : "height"} // Comportamiento para teclado
-        >
+        <View style={styles.container}>
+            {/* Header fuera del KeyboardAvoidingView */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -137,52 +125,61 @@ export default function CommentsScreen({ route, navigation }) {
                 <Text style={styles.title}>Comentarios</Text>
             </View>
 
-            {loading ? (
-                <ActivityIndicator size="large" color="#00aaff" style={styles.loading} />
-            ) : (
-                <FlatList
-                    data={comments}
-                    keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
-                    renderItem={({ item }) => <CommentItem comment={item} />}
-                    contentContainerStyle={styles.listContent}
-                    inverted={true} // Mostrar el comentario más reciente en la parte inferior
-                    ListEmptyComponent={() => (
-                        <View style={styles.emptyContainer}>
-                            <Text style={commentStyles.commentContent}>
-                                ¡Sé el primero en comentar!
-                            </Text>
-                        </View>
-                    )}
-                />
-            )}
+            {/* KeyboardAvoidingView solo para el contenido y el input */}
+            <KeyboardAvoidingView 
+                style={styles.content}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+            >
+                {loading ? (
+                    <ActivityIndicator size="large" color="#00aaff" style={styles.loading} />
+                ) : (
+                    <FlatList
+                        data={comments}
+                        keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                        renderItem={({ item }) => <CommentItem comment={item} />}
+                        contentContainerStyle={[
+                            styles.listContent,
+                            comments.length === 0 && styles.listContentEmpty
+                        ]}
+                        ListEmptyComponent={() => (
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>
+                                    ¡Sé el primero en comentar!
+                                </Text>
+                            </View>
+                        )}
+                    />
+                )}
 
-            {/* --- Área de Input para Comentar --- */}
-            <View style={styles.inputContainer}>
-                <TextInput
-                    style={styles.commentInput}
-                    placeholder="Escribe tu comentario..."
-                    placeholderTextColor="#999"
-                    value={newComment}
-                    onChangeText={setNewComment}
-                    editable={!isSending && !loading}
-                    multiline={true}
-                />
-                <TouchableOpacity 
-                    style={[
-                        styles.sendButton, 
-                        (newComment.trim().length === 0 || isSending) && styles.sendButtonDisabled
-                    ]}
-                    onPress={handleSendComment}
-                    disabled={newComment.trim().length === 0 || isSending}
-                >
-                    {isSending ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                        <Ionicons name="send" size={24} color="#fff" />
-                    )}
-                </TouchableOpacity>
-            </View>
-        </KeyboardAvoidingView>
+                {/* Área de Input para Comentar */}
+                <View style={styles.inputContainer}>
+                    <TextInput
+                        style={styles.commentInput}
+                        placeholder="Escribe tu comentario..."
+                        placeholderTextColor="#999"
+                        value={newComment}
+                        onChangeText={setNewComment}
+                        editable={!isSending && !loading}
+                        multiline={true}
+                    />
+                    <TouchableOpacity 
+                        style={[
+                            styles.sendButton, 
+                            (newComment.trim().length === 0 || isSending) && styles.sendButtonDisabled
+                        ]}
+                        onPress={handleSendComment}
+                        disabled={newComment.trim().length === 0 || isSending}
+                    >
+                        {isSending ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <Ionicons name="send" size={24} color="#fff" />
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </KeyboardAvoidingView>
+        </View>
     );
 }
 
@@ -212,6 +209,9 @@ const styles = StyleSheet.create({
         top: 50,
         zIndex: 10,
     },
+    content: {
+        flex: 1,
+    },
     loading: {
         flex: 1,
         justifyContent: 'center',
@@ -219,7 +219,10 @@ const styles = StyleSheet.create({
     listContent: {
         paddingHorizontal: 15,
         paddingTop: 10,
-        // Invertido, el paddingBottom del View se vuelve paddingTop del FlatList
+        paddingBottom: 10,
+    },
+    listContentEmpty: {
+        flexGrow: 1,
     },
     emptyContainer: {
         flex: 1,
@@ -227,7 +230,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         padding: 30,
     },
-    // Estilos para el input
+    emptyText: {
+        color: '#eee',
+        fontSize: 16,
+        textAlign: 'center',
+    },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',

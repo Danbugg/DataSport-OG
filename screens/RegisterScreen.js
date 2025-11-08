@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ImageBackground,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   ScrollView,
+  Modal,
 } from "react-native";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +25,13 @@ export default function RegisterScreen({ navigation }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+
+  // Estados para modales personalizados
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [successName, setSuccessName] = useState('');
 
   const showDatePicker = () => setDatePickerVisibility(true);
   const hideDatePicker = () => setDatePickerVisibility(false);
@@ -53,24 +60,51 @@ export default function RegisterScreen({ navigation }) {
 
   const handleRegister = async () => {
     // 🔹 Validaciones antes de enviar
-    if (!nombre.trim()) return Alert.alert("Error", "Por favor ingresa tu nombre");
-    if (!apellido.trim()) return Alert.alert("Error", "Por favor ingresa tu apellido");
-    if (!fechaNacimiento) return Alert.alert("Error", "Por favor selecciona tu fecha de nacimiento");
-    if (!email.trim()) return Alert.alert("Error", "Por favor ingresa tu correo electrónico");
+    if (!nombre.trim()) {
+      setErrorMessage("Por favor ingresa tu nombre");
+      setErrorModalVisible(true);
+      return;
+    }
+    if (!apellido.trim()) {
+      setErrorMessage("Por favor ingresa tu apellido");
+      setErrorModalVisible(true);
+      return;
+    }
+    if (!fechaNacimiento) {
+      setErrorMessage("Por favor selecciona tu fecha de nacimiento");
+      setErrorModalVisible(true);
+      return;
+    }
+    if (!email.trim()) {
+      setErrorMessage("Por favor ingresa tu correo electrónico");
+      setErrorModalVisible(true);
+      return;
+    }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return Alert.alert("Error", "Por favor ingresa un correo electrónico válido");
+      setErrorMessage("Por favor ingresa un correo electrónico válido");
+      setErrorModalVisible(true);
+      return;
     }
 
-    if (!usuario.trim()) return Alert.alert("Error", "Por favor elige un nombre de usuario");
-    if (!password.trim()) return Alert.alert("Error", "Por favor ingresa una contraseña");
+    if (!usuario.trim()) {
+      setErrorMessage("Por favor elige un nombre de usuario");
+      setErrorModalVisible(true);
+      return;
+    }
+    if (!password.trim()) {
+      setErrorMessage("Por favor ingresa una contraseña");
+      setErrorModalVisible(true);
+      return;
+    }
 
     if (!validatePassword(password)) {
-      return Alert.alert(
-        "Contraseña insegura",
+      setErrorMessage(
         "La contraseña debe tener:\n• Al menos 8 caracteres\n• Una mayúscula\n• Una minúscula\n• Un número\n• Un símbolo especial"
       );
+      setErrorModalVisible(true);
+      return;
     }
 
     // 🔹 Envío al servidor
@@ -99,31 +133,99 @@ export default function RegisterScreen({ navigation }) {
       }
 
       if (response.ok) {
-        Alert.alert("Registro exitoso", `Bienvenido/a ${nombre} ${apellido}`, [
-          { text: "OK", onPress: () => navigation.navigate("LoginScreen") },
-        ]);
+        setSuccessName(`${nombre} ${apellido}`);
+        setSuccessMessage("¡Tu cuenta ha sido creada exitosamente! Ya puedes iniciar sesión.");
+        setSuccessModalVisible(true);
       } else {
         // 🔹 Manejo de errores que manda el backend
         if (data.error && data.error.toLowerCase().includes("correo")) {
-          Alert.alert("Error de registro", "El correo ya existe");
+          setErrorMessage("El correo ya existe. Por favor usa otro correo electrónico.");
         } else if (data.error && data.error.toLowerCase().includes("usuario")) {
-          Alert.alert("Error de registro", "El nombre de usuario ya existe");
+          setErrorMessage("El nombre de usuario ya existe. Por favor elige otro.");
         } else {
-          Alert.alert(
-            "Error de registro",
-            data.error || "Ocurrió un error en el servidor."
-          );
+          setErrorMessage(data.error || "Ocurrió un error en el servidor.");
         }
+        setErrorModalVisible(true);
       }
     } catch (error) {
       console.error("Error de conexión:", error);
-      Alert.alert("Error de Conexión", "No se pudo conectar con el servidor.");
+      setErrorMessage("No se pudo conectar con el servidor. Verifica tu conexión.");
+      setErrorModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
   const fondoRegister = require("../assets/fondoRegister.jpg");
+
+  // --- MODAL DE ERROR ---
+  const ErrorModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={errorModalVisible}
+      onRequestClose={() => setErrorModalVisible(false)}
+    >
+      <TouchableOpacity 
+        style={modalStyles.centeredView} 
+        activeOpacity={1}
+        onPress={() => setErrorModalVisible(false)}
+      >
+        <View style={modalStyles.errorModalView}>
+          <Ionicons name="close-circle" size={60} color="#ff3333" style={{ marginBottom: 15 }} />
+          
+          <Text style={modalStyles.errorTitle}>Error de Registro</Text>
+          <Text style={modalStyles.errorMessage}>{errorMessage}</Text>
+
+          <TouchableOpacity
+            style={modalStyles.errorButton}
+            onPress={() => setErrorModalVisible(false)}
+          >
+            <Text style={modalStyles.errorButtonText}>Aceptar</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // --- MODAL DE ÉXITO ---
+  const SuccessModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={successModalVisible}
+      onRequestClose={() => {
+        setSuccessModalVisible(false);
+        navigation.navigate("LoginScreen");
+      }}
+    >
+      <TouchableOpacity 
+        style={modalStyles.centeredView} 
+        activeOpacity={1}
+        onPress={() => {
+          setSuccessModalVisible(false);
+          navigation.navigate("LoginScreen");
+        }}
+      >
+        <View style={modalStyles.successModalView}>
+          <Ionicons name="checkmark-circle" size={60} color="#002affff" style={{ marginBottom: 15 }} />
+          
+          <Text style={modalStyles.successTitle}>¡Bienvenido/a {successName}!</Text>
+          <Text style={modalStyles.successMessage}>{successMessage}</Text>
+
+          <TouchableOpacity
+            style={modalStyles.successButton}
+            onPress={() => {
+              setSuccessModalVisible(false);
+              navigation.navigate("LoginScreen");
+            }}
+          >
+            <Text style={modalStyles.successButtonText}>Ir a Iniciar Sesión</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
 
   return (
     <ImageBackground source={fondoRegister} style={styles.background}>
@@ -235,10 +337,107 @@ export default function RegisterScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Modales personalizados */}
+      <ErrorModal />
+      <SuccessModal />
     </ImageBackground>
   );
 }
 
+// --- ESTILOS DE LOS MODALES ---
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  // Modal de Error
+  errorModalView: {
+    width: '85%',
+    margin: 20,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: '#ff3333',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ff3333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  errorButton: {
+    backgroundColor: '#ff3333',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+  },
+  errorButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Modal de Éxito
+  successModalView: {
+    width: '85%',
+    margin: 20,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: '#7dd8ffff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2e24f1ff',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  successButton: {
+    backgroundColor: '#3799faff',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+  },
+  successButtonText: {
+    color: '#1a1a1a',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});
+
+// --- ESTILOS PRINCIPALES ---
 const styles = StyleSheet.create({
   background: {
     flex: 1,

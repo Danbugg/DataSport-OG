@@ -5,11 +5,11 @@ import {
     StyleSheet, 
     FlatList,
     ActivityIndicator, 
-    Alert, 
     Image,
     TouchableOpacity,
     SafeAreaView,
     Modal,
+    TextInput,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons"; 
@@ -46,7 +46,6 @@ const PostCard = ({ post, navigation, onLikeToggle, currentUserId, isPostOwner, 
         if (!success) {
             setIsLiked(!newIsLiked);
             setLikeCount(newIsLiked ? likeCount - 1 : likeCount + 1);
-            Alert.alert("Error", "No se pudo registrar tu 'Me gusta'.");
         }
     };
 
@@ -128,21 +127,36 @@ const PostCard = ({ post, navigation, onLikeToggle, currentUserId, isPostOwner, 
 
             <View style={postStyles.postActions}>
                 <TouchableOpacity onPress={handleLike} style={postStyles.actionButton}>
-                    <Ionicons 
-                        name={isLiked ? "heart" : "heart-outline"} 
-                        size={24} 
-                        color={isLiked ? "#ff0000" : "#eee"} 
-                    />
+                    <View style={[postStyles.iconContainer, isLiked && postStyles.iconContainerActive]}>
+                        <Ionicons 
+                            name={isLiked ? "heart" : "heart-outline"} 
+                            size={22} 
+                            color={isLiked ? "#ff0000" : "#eee"} 
+                        />
+                    </View>
                     <Text style={postStyles.actionText}>{likeCount}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={navigateToComments} style={postStyles.actionButton}>
-                    <Ionicons 
-                        name="chatbubble-outline" 
-                        size={24} 
-                        color="#00aaff"
-                    />
+                    <View style={postStyles.iconContainer}>
+                        <Ionicons 
+                            name="chatbubble-outline" 
+                            size={22} 
+                            color="#00aaff"
+                        />
+                    </View>
                     <Text style={postStyles.actionText}>{post.commentCount || 0}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={postStyles.actionButton}>
+                    <View style={postStyles.iconContainer}>
+                        <Ionicons 
+                            name="share-social-outline" 
+                            size={22} 
+                            color="#00ff88"
+                        />
+                    </View>
+                    <Text style={postStyles.actionText}>Compartir</Text>
                 </TouchableOpacity>
             </View>
         </View>
@@ -206,21 +220,40 @@ const postStyles = StyleSheet.create({
     },
     postActions: {
         flexDirection: 'row',
-        paddingVertical: 8,
+        justifyContent: 'space-around',
+        paddingVertical: 12,
         borderTopWidth: 1,
         borderTopColor: '#333',
-        marginBottom: 5,
+        marginTop: 5,
     },
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginRight: 20,
-        padding: 5,
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: '#252525',
+        paddingHorizontal: 16,
+        minWidth: 90,
+        justifyContent: 'center',
+    },
+    iconContainer: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#1a1a1aff',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: '#333333ff',
+    },
+    iconContainerActive: {
+        backgroundColor: '#ff000015',
+        borderColor: '#ff0000',
     },
     actionText: {
         color: '#eee',
         fontSize: 14,
-        marginLeft: 5,
         fontWeight: '600',
     },
     optionsButton: {
@@ -239,75 +272,158 @@ export default function HomeScreen({ navigation }) {
     const [selectedPostId, setSelectedPostId] = useState(null);
     const [isModalPostOwner, setIsModalPostOwner] = useState(false);
 
-    const getUserId = async () => {
-        const id = await AsyncStorage.getItem("userId");
-        setCurrentUserId(id);
-    };
+    // Estados para notificaciones
+    const [notifications, setNotifications] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
 
     // Estados adicionales para modales de confirmación
     const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
     const [confirmReportVisible, setConfirmReportVisible] = useState(false);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [reportReason, setReportReason] = useState('');
     const [successModalVisible, setSuccessModalVisible] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [errorModalVisible, setErrorModalVisible] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
 
+    const getUserId = async () => {
+        const id = await AsyncStorage.getItem("userId");
+        setCurrentUserId(id);
+    };
+
+    // Cargar notificaciones
+    const fetchNotifications = async () => {
+        if (!currentUserId) return;
+        
+        try {
+            const response = await fetch(`${API_BASE_URL}/notifications/${currentUserId}`);
+            if (response.ok) {
+                const data = await response.json();
+                setNotifications(data.notifications || []);
+                setUnreadCount(data.unreadCount || 0);
+            }
+        } catch (error) {
+            console.error("Error al cargar notificaciones:", error);
+        }
+    };
+
+    // Marcar notificación como leída
+    const markAsRead = async (notificationId) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/read`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUserId }),
+            });
+
+            if (response.ok) {
+                fetchNotifications();
+            }
+        } catch (error) {
+            console.error("Error al marcar como leída:", error);
+        }
+    };
+
+    // Marcar todas como leídas
+    const markAllAsRead = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/notifications/${currentUserId}/read-all`, {
+                method: 'PUT',
+            });
+
+            if (response.ok) {
+                fetchNotifications();
+            }
+        } catch (error) {
+            console.error("Error al marcar todas como leídas:", error);
+        }
+    };
+
     const deletePost = useCallback((postId) => {
         setModalVisible(false);
         setSelectedPostId(postId);
+        setDeleteReason('');
         setConfirmDeleteVisible(true);
     }, []);
 
     const executeDelete = useCallback(async () => {
+        if (!deleteReason.trim()) {
+            setErrorMessage("Por favor, proporciona una razón para eliminar la publicación.");
+            setErrorModalVisible(true);
+            return;
+        }
+
         setConfirmDeleteVisible(false);
         
         try {
             const response = await fetch(`${API_BASE_URL}/posts/${selectedPostId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUserId }),
+                body: JSON.stringify({ 
+                    userId: currentUserId,
+                    reason: deleteReason 
+                }),
             });
 
             if (response.ok) {
                 setPosts(prevPosts => prevPosts.filter(p => p.id !== selectedPostId));
-                Alert.alert("Éxito", "Publicación eliminada correctamente.");
+                setSuccessMessage("Publicación eliminada correctamente.");
+                setSuccessModalVisible(true);
+                setDeleteReason('');
             } else {
                 const data = await response.json().catch(() => ({}));
-                Alert.alert("Error", data.error || "No se pudo eliminar la publicación.");
+                setErrorMessage(data.error || "No se pudo eliminar la publicación.");
+                setErrorModalVisible(true);
             }
         } catch (error) {
             console.error("Error al eliminar:", error);
-            Alert.alert("Error", "Error de conexión.");
+            setErrorMessage("Error de conexión.");
+            setErrorModalVisible(true);
         }
-    }, [selectedPostId, currentUserId]);
+    }, [selectedPostId, currentUserId, deleteReason]);
 
     const reportPost = useCallback((postId) => {
         setModalVisible(false);
         setSelectedPostId(postId);
+        setReportReason('');
         setConfirmReportVisible(true);
     }, []);
 
     const executeReport = useCallback(async () => {
+        if (!reportReason.trim()) {
+            setErrorMessage("Por favor, proporciona una razón para reportar la publicación.");
+            setErrorModalVisible(true);
+            return;
+        }
+
         setConfirmReportVisible(false);
         
         try {
             const response = await fetch(`${API_BASE_URL}/posts/${selectedPostId}/report`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reporterId: currentUserId }),
+                body: JSON.stringify({ 
+                    reporterId: currentUserId,
+                    reason: reportReason 
+                }),
             });
 
             if (response.ok) {
-                Alert.alert("Reporte Enviado", "Gracias. Revisaremos la publicación pronto.");
+                setSuccessMessage("Reporte enviado. Gracias por ayudarnos a mantener la comunidad segura.");
+                setSuccessModalVisible(true);
+                setReportReason('');
             } else {
                 const data = await response.json().catch(() => ({}));
-                Alert.alert("Error", data.error || "No se pudo enviar el reporte.");
+                setErrorMessage(data.error || "No se pudo enviar el reporte.");
+                setErrorModalVisible(true);
             }
         } catch (error) {
             console.error("Error al reportar:", error);
-            Alert.alert("Error", "Error de conexión.");
+            setErrorMessage("Error de conexión.");
+            setErrorModalVisible(true);
         }
-    }, [selectedPostId, currentUserId]);
+    }, [selectedPostId, currentUserId, reportReason]);
 
     const handlePostOptions = useCallback((postId, isAuthor) => {
         if (!currentUserId) {
@@ -371,6 +487,7 @@ export default function HomeScreen({ navigation }) {
         useCallback(() => {
             getUserId().then(() => {});
             fetchGlobalPosts();
+            fetchNotifications();
         }, [currentUserId]) 
     );
 
@@ -390,31 +507,135 @@ export default function HomeScreen({ navigation }) {
         );
     };
 
+    // --- MODAL DE NOTIFICACIONES ---
+    const NotificationsModal = () => (
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={notificationsModalVisible}
+            onRequestClose={() => setNotificationsModalVisible(false)}
+        >
+            <View style={notificationStyles.modalContainer}>
+                <View style={notificationStyles.modalContent}>
+                    <View style={notificationStyles.modalHeader}>
+                        <Text style={notificationStyles.modalTitle}>Notificaciones</Text>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                            {unreadCount > 0 && (
+                                <TouchableOpacity onPress={markAllAsRead}>
+                                    <Text style={notificationStyles.markAllRead}>Marcar todas</Text>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity onPress={() => setNotificationsModalVisible(false)}>
+                                <Ionicons name="close" size={28} color="#fff" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    {notifications.length > 0 ? (
+                        <FlatList
+                            data={notifications}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={[
+                                        notificationStyles.notificationItem,
+                                        !item.isRead && notificationStyles.unreadNotification
+                                    ]}
+                                    onPress={() => {
+                                        if (!item.isRead) markAsRead(item.id);
+                                    }}
+                                >
+                                    <View style={notificationStyles.notificationIcon}>
+                                        <Ionicons 
+                                            name={item.type === 'post_deleted' ? 'trash' : 'alert-circle'} 
+                                            size={24} 
+                                            color={item.type === 'post_deleted' ? '#ff3333' : '#00aaff'} 
+                                        />
+                                    </View>
+                                    <View style={notificationStyles.notificationContent}>
+                                        <Text style={notificationStyles.notificationTitle}>
+                                            {item.type === 'post_deleted' ? 'Publicación Eliminada' : 'Notificación'}
+                                        </Text>
+                                        <Text style={notificationStyles.notificationMessage}>
+                                            {item.message}
+                                        </Text>
+                                        <Text style={notificationStyles.notificationDate}>
+                                            {new Date(item.createdAt).toLocaleDateString('es-ES', {
+                                                year: 'numeric',
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
+                                        </Text>
+                                    </View>
+                                    {!item.isRead && (
+                                        <View style={notificationStyles.unreadDot} />
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                        />
+                    ) : (
+                        <View style={notificationStyles.emptyState}>
+                            <Ionicons name="notifications-off" size={60} color="#888" />
+                            <Text style={notificationStyles.emptyText}>No tienes notificaciones</Text>
+                        </View>
+                    )}
+                </View>
+            </View>
+        </Modal>
+    );
+
     // --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN ---
     const ConfirmDeleteModal = () => (
         <Modal
             animationType="fade"
             transparent={true}
             visible={confirmDeleteVisible}
-            onRequestClose={() => setConfirmDeleteVisible(false)}
+            onRequestClose={() => {
+                setConfirmDeleteVisible(false);
+                setDeleteReason('');
+            }}
         >
-            <TouchableOpacity 
-                style={modalStyles.centeredView} 
-                activeOpacity={1}
-                onPress={() => setConfirmDeleteVisible(false)}
-            >
+            <View style={modalStyles.centeredView}>
+                <TouchableOpacity 
+                    style={modalStyles.modalBackdrop}
+                    activeOpacity={1}
+                    onPress={() => {
+                        setConfirmDeleteVisible(false);
+                        setDeleteReason('');
+                    }}
+                />
                 <View style={modalStyles.confirmModalView}>
                     <Ionicons name="warning-outline" size={50} color="#ff3333" style={{ marginBottom: 15 }} />
                     
                     <Text style={modalStyles.confirmTitle}>Confirmar Eliminación</Text>
                     <Text style={modalStyles.confirmMessage}>
-                        ¿Estás seguro de que quieres eliminar esta publicación? Esta acción es permanente.
+                        ¿Por qué deseas eliminar esta publicación?
+                    </Text>
+
+                    <TextInput
+                        style={modalStyles.textInput}
+                        placeholder="Escribe la razón aquí..."
+                        placeholderTextColor="#888"
+                        value={deleteReason}
+                        onChangeText={setDeleteReason}
+                        multiline
+                        numberOfLines={4}
+                        maxLength={200}
+                    />
+
+                    <Text style={modalStyles.characterCount}>
+                        {deleteReason.length}/200
                     </Text>
 
                     <View style={modalStyles.confirmButtonsContainer}>
                         <TouchableOpacity
                             style={[modalStyles.confirmButton, modalStyles.cancelConfirmButton]}
-                            onPress={() => setConfirmDeleteVisible(false)}
+                            onPress={() => {
+                                setConfirmDeleteVisible(false);
+                                setDeleteReason('');
+                            }}
                         >
                             <Text style={modalStyles.cancelConfirmText}>Cancelar</Text>
                         </TouchableOpacity>
@@ -427,7 +648,7 @@ export default function HomeScreen({ navigation }) {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </TouchableOpacity>
+            </View>
         </Modal>
     );
 
@@ -437,25 +658,50 @@ export default function HomeScreen({ navigation }) {
             animationType="fade"
             transparent={true}
             visible={confirmReportVisible}
-            onRequestClose={() => setConfirmReportVisible(false)}
+            onRequestClose={() => {
+                setConfirmReportVisible(false);
+                setReportReason('');
+            }}
         >
-            <TouchableOpacity 
-                style={modalStyles.centeredView} 
-                activeOpacity={1}
-                onPress={() => setConfirmReportVisible(false)}
-            >
+            <View style={modalStyles.centeredView}>
+                <TouchableOpacity 
+                    style={modalStyles.modalBackdrop}
+                    activeOpacity={1}
+                    onPress={() => {
+                        setConfirmReportVisible(false);
+                        setReportReason('');
+                    }}
+                />
                 <View style={modalStyles.confirmModalView}>
                     <Ionicons name="flag-outline" size={50} color="#ffcc00" style={{ marginBottom: 15 }} />
                     
                     <Text style={modalStyles.confirmTitle}>Reportar Publicación</Text>
                     <Text style={modalStyles.confirmMessage}>
-                        ¿Estás seguro de que quieres reportar esta publicación? Los reportes son anónimos.
+                        ¿Por qué deseas reportar esta publicación?
+                    </Text>
+
+                    <TextInput
+                        style={modalStyles.textInput}
+                        placeholder="Escribe la razón aquí..."
+                        placeholderTextColor="#888"
+                        value={reportReason}
+                        onChangeText={setReportReason}
+                        multiline
+                        numberOfLines={4}
+                        maxLength={200}
+                    />
+
+                    <Text style={modalStyles.characterCount}>
+                        {reportReason.length}/200
                     </Text>
 
                     <View style={modalStyles.confirmButtonsContainer}>
                         <TouchableOpacity
                             style={[modalStyles.confirmButton, modalStyles.cancelConfirmButton]}
-                            onPress={() => setConfirmReportVisible(false)}
+                            onPress={() => {
+                                setConfirmReportVisible(false);
+                                setReportReason('');
+                            }}
                         >
                             <Text style={modalStyles.cancelConfirmText}>Cancelar</Text>
                         </TouchableOpacity>
@@ -468,7 +714,7 @@ export default function HomeScreen({ navigation }) {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </TouchableOpacity>
+            </View>
         </Modal>
     );
 
@@ -584,6 +830,21 @@ export default function HomeScreen({ navigation }) {
                     Data<Text style={styles.sport}>Sport</Text>
                 </Text>
                 <Text style={styles.title}>Feed</Text>
+                
+                {/* Botón de notificaciones */}
+                <TouchableOpacity 
+                    style={styles.notificationButton}
+                    onPress={() => setNotificationsModalVisible(true)}
+                >
+                    <Ionicons name="notifications" size={28} color="#fff" />
+                    {unreadCount > 0 && (
+                        <View style={styles.notificationBadge}>
+                            <Text style={styles.notificationBadgeText}>
+                                {unreadCount > 9 ? '9+' : unreadCount}
+                            </Text>
+                        </View>
+                    )}
+                </TouchableOpacity>
             </View>
 
             {loading ? (
@@ -612,6 +873,7 @@ export default function HomeScreen({ navigation }) {
                 />
             )}
 
+            <NotificationsModal />
             <PostOptionsModal />
             <ConfirmDeleteModal />
             <ConfirmReportModal />
@@ -620,217 +882,6 @@ export default function HomeScreen({ navigation }) {
         </SafeAreaView>
     );
 }
-
-// --- ESTILOS DEL MODAL ---
-const modalStyles = StyleSheet.create({
-    centeredView: {
-        flex: 1,
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    },
-    modalView: {
-        width: '90%',
-        margin: 20,
-        backgroundColor: '#1a1a1a',
-        borderRadius: 20,
-        padding: 10,
-        alignItems: 'center',
-        shadowColor: '#00aaff',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-    button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 15,
-        width: '100%',
-        borderRadius: 15,
-        marginVertical: 5,
-    },
-    reportButton: {
-        backgroundColor: '#333', 
-    },
-    reportText: {
-        color: '#ffcc00',
-        fontWeight: 'bold',
-        fontSize: 18,
-        marginLeft: 10,
-    },
-    deleteButton: {
-        backgroundColor: '#333',
-    },
-    deleteText: {
-        color: '#ff3333',
-        fontWeight: 'bold',
-        fontSize: 18,
-        marginLeft: 10,
-    },
-    separator: {
-        height: 1,
-        backgroundColor: '#444',
-        width: '100%',
-        marginVertical: 5,
-    },
-    cancelButton: {
-        backgroundColor: '#00aaff',
-    },
-    cancelText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 18,
-        textAlign: 'center',
-        width: '100%',
-    },
-    // Estilos para modales de confirmación
-    confirmModalView: {
-        width: '85%',
-        margin: 20,
-        backgroundColor: '#1a1a1a',
-        borderRadius: 20,
-        padding: 25,
-        alignItems: 'center',
-        shadowColor: '#00aaff',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-    confirmTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#fff',
-        marginBottom: 10,
-        textAlign: 'center',
-    },
-    confirmMessage: {
-        fontSize: 16,
-        color: '#ccc',
-        textAlign: 'center',
-        marginBottom: 25,
-        lineHeight: 22,
-    },
-    confirmButtonsContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        width: '100%',
-        gap: 10,
-    },
-    confirmButton: {
-        flex: 1,
-        padding: 15,
-        borderRadius: 15,
-        alignItems: 'center',
-    },
-    cancelConfirmButton: {
-        backgroundColor: '#333',
-    },
-    cancelConfirmText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    deleteConfirmButton: {
-        backgroundColor: '#ff3333',
-    },
-    deleteConfirmText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    reportConfirmButton: {
-        backgroundColor: '#ffcc00',
-    },
-    reportConfirmText: {
-        color: '#1a1a1a',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    // Estilos para modal de éxito
-    successModalView: {
-        width: '85%',
-        margin: 20,
-        backgroundColor: '#1a1a1a',
-        borderRadius: 20,
-        padding: 25,
-        alignItems: 'center',
-        shadowColor: '#00ff00',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-    successTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#00ff00',
-        marginBottom: 10,
-        textAlign: 'center',
-    },
-    successMessage: {
-        fontSize: 16,
-        color: '#ccc',
-        textAlign: 'center',
-        marginBottom: 20,
-        lineHeight: 22,
-    },
-    successButton: {
-        backgroundColor: '#00ff00',
-        paddingVertical: 12,
-        paddingHorizontal: 40,
-        borderRadius: 15,
-        width: '100%',
-        alignItems: 'center',
-    },
-    successButtonText: {
-        color: '#1a1a1a',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    // Estilos para modal de error
-    errorModalView: {
-        width: '85%',
-        margin: 20,
-        backgroundColor: '#1a1a1a',
-        borderRadius: 20,
-        padding: 25,
-        alignItems: 'center',
-        shadowColor: '#ff3333',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-    errorTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#ff3333',
-        marginBottom: 10,
-        textAlign: 'center',
-    },
-    errorMessage: {
-        fontSize: 16,
-        color: '#ccc',
-        textAlign: 'center',
-        marginBottom: 20,
-        lineHeight: 22,
-    },
-    errorButton: {
-        backgroundColor: '#ff3333',
-        paddingVertical: 12,
-        paddingHorizontal: 40,
-        borderRadius: 15,
-        width: '100%',
-        alignItems: 'center',
-    },
-    errorButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    }
-});
 
 // --- ESTILOS PRINCIPALES ---
 const styles = StyleSheet.create({
@@ -844,10 +895,46 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         paddingHorizontal: 20,
         paddingTop: 40,
+        position: 'relative',
     },
-    logo: { fontSize: 32, fontWeight: "bold", color: "#ff0000" },
-    sport: { color: "#00aaff" },
-    title: { fontSize: 22, fontWeight: "bold", color: "#fff", marginTop: 5 },
+    logo: { 
+        fontSize: 32, 
+        fontWeight: "bold", 
+        color: "#ff0000" 
+    },
+    sport: { 
+        color: "#00aaff" 
+    },
+    title: { 
+        fontSize: 22, 
+        fontWeight: "bold", 
+        color: "#fff", 
+        marginTop: 5 
+    },
+    notificationButton: {
+        position: 'absolute',
+        right: 20,
+        top: 45,
+        padding: 5,
+    },
+    notificationBadge: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        backgroundColor: '#ff0000',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#000',
+    },
+    notificationBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
     subtitle: { fontSize: 16, color: "#eee", marginBottom: 10, textAlign: "center" },
     subtitleSmall: { fontSize: 14, color: "#bbb", textAlign: "center" },
     listContent: {
@@ -871,4 +958,319 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#00aaff55'
     }
+});
+
+// --- ESTILOS DE NOTIFICACIONES ---
+const notificationStyles = StyleSheet.create({
+    modalContainer: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    },
+    modalContent: {
+        flex: 1,
+        backgroundColor: '#1a1a1a',
+        marginTop: 60,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#333',
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    markAllRead: {
+        color: '#00aaff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    notificationItem: {
+        flexDirection: 'row',
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#333',
+        alignItems: 'center',
+    },
+    unreadNotification: {
+        backgroundColor: '#252525',
+    },
+    notificationIcon: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#2a2a2a',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    notificationContent: {
+        flex: 1,
+    },
+    notificationTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#fff',
+        marginBottom: 5,
+    },
+    notificationMessage: {
+        fontSize: 14,
+        color: '#ccc',
+        lineHeight: 20,
+        marginBottom: 5,
+    },
+    notificationDate: {
+        fontSize: 12,
+        color: '#888',
+    },
+    unreadDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#00aaff',
+        marginLeft: 10,
+    },
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60,
+    },
+    emptyText: {
+        color: '#888',
+        fontSize: 16,
+        marginTop: 15,
+    },
+});
+
+// --- ESTILOS DE MODALES ---
+const modalStyles = StyleSheet.create({
+    centeredView: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    },
+    modalBackdrop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    modalView: {
+        backgroundColor: '#1a1a1a',
+        borderRadius: 20,
+        padding: 20,
+        width: '85%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    button: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 15,
+        borderRadius: 10,
+        marginVertical: 5,
+    },
+    deleteButton: {
+        backgroundColor: '#ff333320',
+    },
+    reportButton: {
+        backgroundColor: '#ffcc0020',
+    },
+    cancelButton: {
+        backgroundColor: '#33333350',
+    },
+    deleteText: {
+        color: '#ff3333',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 10,
+    },
+    reportText: {
+        color: '#ffcc00',
+        fontSize: 16,
+        fontWeight: '600',
+        marginLeft: 10,
+    },
+    cancelText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+        textAlign: 'center',
+        width: '100%',
+    },
+    separator: {
+        height: 1,
+        backgroundColor: '#333',
+        marginVertical: 10,
+    },
+    // Estilos para modales de confirmación
+    confirmModalView: {
+        backgroundColor: '#1a1a1a',
+        borderRadius: 20,
+        padding: 25,
+        width: '85%',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+        zIndex: 1,
+    },
+    confirmTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#fff',
+        marginBottom: 15,
+        textAlign: 'center',
+    },
+    confirmMessage: {
+        fontSize: 15,
+        color: '#ccc',
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 15,
+    },
+    textInput: {
+        width: '100%',
+        backgroundColor: '#252525',
+        borderRadius: 10,
+        padding: 15,
+        color: '#fff',
+        fontSize: 15,
+        minHeight: 100,
+        textAlignVertical: 'top',
+        borderWidth: 1,
+        borderColor: '#333',
+        marginBottom: 5,
+    },
+    characterCount: {
+        alignSelf: 'flex-end',
+        color: '#888',
+        fontSize: 12,
+        marginBottom: 15,
+    },
+    confirmButtonsContainer: {
+        flexDirection: 'row',
+        gap: 10,
+        width: '100%',
+    },
+    confirmButton: {
+        flex: 1,
+        padding: 15,
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    cancelConfirmButton: {
+        backgroundColor: '#33333380',
+    },
+    deleteConfirmButton: {
+        backgroundColor: '#ff3333',
+    },
+    reportConfirmButton: {
+        backgroundColor: '#ffcc00',
+    },
+    cancelConfirmText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    deleteConfirmText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    reportConfirmText: {
+        color: '#000',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    // Estilos para modal de éxito
+    successModalView: {
+        backgroundColor: '#1a1a1a',
+        borderRadius: 20,
+        padding: 30,
+        width: '85%',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    successTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#00ff00',
+        marginBottom: 10,
+    },
+    successMessage: {
+        fontSize: 15,
+        color: '#ccc',
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    successButton: {
+        backgroundColor: '#00ff00',
+        paddingVertical: 12,
+        paddingHorizontal: 40,
+        borderRadius: 10,
+        marginTop: 10,
+    },
+    successButtonText: {
+        color: '#000',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    // Estilos para modal de error
+    errorModalView: {
+        backgroundColor: '#1a1a1a',
+        borderRadius: 20,
+        padding: 30,
+        width: '85%',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    errorTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#ff3333',
+        marginBottom: 10,
+    },
+    errorMessage: {
+        fontSize: 15,
+        color: '#ccc',
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 20,
+    },
+    errorButton: {
+        backgroundColor: '#ff3333',
+        paddingVertical: 12,
+        paddingHorizontal: 40,
+        borderRadius: 10,
+        marginTop: 10,
+    },
+    errorButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
 });

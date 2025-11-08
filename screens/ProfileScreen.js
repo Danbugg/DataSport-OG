@@ -19,9 +19,7 @@ import { useFocusEffect, useRoute, useNavigation } from "@react-navigation/nativ
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Usaremos la URL de IP local (AJUSTA ESTO SI USAS EMULADOR/DISPOSITIVO REAL)
 const API_BASE_URL = "http://localhost:3000"; 
-
 const { width } = Dimensions.get('window');
 
 // -----------------------------------------------------------------
@@ -138,7 +136,6 @@ const postStyles = StyleSheet.create({
     }
 });
 
-
 // --- Componente de Tarjeta de Publicación (PostCard) ---
 const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }) => {
     const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
@@ -183,7 +180,6 @@ const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }
                         {formatPostDate(post.createdAt)}
                     </Text>
                     
-                    {/* Botón de Opciones (3 Puntos) */}
                     <TouchableOpacity style={postStyles.optionsButton} onPress={() => handleOptions(post.id, isPostOwner)}>
                         <Ionicons 
                             name="ellipsis-vertical" 
@@ -192,12 +188,10 @@ const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }
                         />
                     </TouchableOpacity>
                 </View>
-
             </View>
             
             <Text style={postStyles.postContent}>{post.content}</Text>
             
-            {/* Image envuelta en TouchableOpacity para el visor */}
             {post.imageUrl && (
                 <TouchableOpacity onPress={navigateToImgCompleta}>
                     <Image 
@@ -233,7 +227,6 @@ const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }
     );
 };
 
-
 // --- Componente PRINCIPAL ProfileScreen / PerfilUsuarioScreen ---
 export default function ProfileScreen() {
     const route = useRoute();
@@ -248,7 +241,8 @@ export default function ProfileScreen() {
     const [isFollowing, setIsFollowing] = useState(false); 
     const [loading, setLoading] = useState(true);
     const [isToggleLoading, setIsToggleLoading] = useState(false); 
-    const [currentViewingId, setCurrentViewingId] = useState(null); 
+    const [currentViewingId, setCurrentViewingId] = useState(null);
+    const [isAdmin, setIsAdmin] = useState(false); // NUEVO: Estado para verificar si es admin
     const fondoLogin = require("../assets/fondoLogin.jpg"); 
 
     // Estados del Modal
@@ -257,10 +251,6 @@ export default function ProfileScreen() {
     const [isModalPostOwner, setIsModalPostOwner] = useState(false);
     const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
     const [confirmReportVisible, setConfirmReportVisible] = useState(false);
-    const [successModalVisible, setSuccessModalVisible] = useState(false);
-    const [successMessage, setSuccessMessage] = useState('');
-    const [errorModalVisible, setErrorModalVisible] = useState(false);
-    const [errorMessage, setErrorMessage] = useState('');
 
     const isOwnProfile = String(currentViewingId) === String(currentLoggedInId);
 
@@ -365,7 +355,7 @@ export default function ProfileScreen() {
 
         setSelectedPostId(postId);
         setIsModalPostOwner(isAuthor);
-        setModalVisible(true); // Abrir el modal personalizado
+        setModalVisible(true);
 
     }, [currentLoggedInId]);
     
@@ -431,6 +421,10 @@ export default function ProfileScreen() {
                 const data = await profileResponse.json();
                 const profileData = { ...data.user, id_usuario: String(data.user.id_usuario), descripcion: data.user.descripcion || '' };
                 setUserProfile(profileData);
+                
+                // NUEVO: Verificar si el usuario es admin (rol_id === 2)
+                setIsAdmin(data.user.rol_id === 2);
+                
                 success = true;
                 setFollowMetrics({ followersCount: data.followersCount || 0, followingCount: data.followingCount || 0, });
             } else {
@@ -474,19 +468,31 @@ export default function ProfileScreen() {
         );
     };
     
+    // MODIFICADO: Agregar opción de Panel de Administración
     const handleSettings = () => {
         if (!isOwnProfile) return;
-        Alert.alert("Opciones", "Selecciona una opción", [
-                { text: "Editar Perfil", onPress: () => navigation.navigate('EditProfileScreen', { userId: currentLoggedInId, userProfile }), },
-                { text: "Cerrar Sesión", onPress: async () => { await AsyncStorage.clear(); navigation.replace('LoginScreen'); } },
-                { text: "Eliminar Cuenta", onPress: handleDeleteAccount, style: "destructive", },
-                { text: "Cancelar", style: "cancel", },
-            ]
+        
+        const options = [
+            { text: "Editar Perfil", onPress: () => navigation.navigate('EditProfileScreen', { userId: currentLoggedInId, userProfile }) },
+        ];
+        
+        // Agregar opción de Panel de Administración si es admin
+        if (isAdmin) {
+            options.push({
+                text: "Panel de Administración",
+                onPress: () => navigation.navigate('AdminPanelScreen')
+            });
+        }
+        
+        options.push(
+            { text: "Cerrar Sesión", onPress: async () => { await AsyncStorage.clear(); navigation.replace('LoginScreen'); } },
+            { text: "Eliminar Cuenta", onPress: handleDeleteAccount, style: "destructive" },
+            { text: "Cancelar", style: "cancel" }
         );
+        
+        Alert.alert("Opciones", "Selecciona una opción", options);
     };
 
-
-    // Manejo de estados de Carga y Error
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -520,7 +526,6 @@ export default function ProfileScreen() {
                 <View style={modalStyles.modalView}>
                     
                     {isModalPostOwner ? (
-                        /* Opción para el Propietario */
                         <TouchableOpacity
                             style={[modalStyles.button, modalStyles.deleteButton]}
                             onPress={() => deletePost(selectedPostId)}
@@ -529,7 +534,6 @@ export default function ProfileScreen() {
                             <Text style={modalStyles.deleteText}>Eliminar Publicación</Text>
                         </TouchableOpacity>
                     ) : (
-                        /* Opción para Otros Usuarios */
                         <TouchableOpacity
                             style={[modalStyles.button, modalStyles.reportButton]}
                             onPress={() => reportPost(selectedPostId)}
@@ -643,7 +647,6 @@ export default function ProfileScreen() {
                         <View style={styles.profileHeader}>
                             
                             <View style={styles.profileInfoGroup}> 
-                                {/* El botón de regreso solo es visible cuando se ve otro perfil */}
                                 {!isOwnProfile && (
                                     <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                                         <Ionicons name="arrow-back" size={28} color="#fff" />
@@ -658,6 +661,13 @@ export default function ProfileScreen() {
                                     <View style={styles.userInfoText}>
                                         <Text style={styles.usernameText}>@{userProfile.nombre_usuario}</Text>
                                         <Text style={styles.userStatus}>{userProfile.descripcion || 'Sin descripción'}</Text>
+                                        {/* NUEVO: Mostrar insignia de admin */}
+                                        {isAdmin && isOwnProfile && (
+                                            <View style={styles.adminBadge}>
+                                                <Ionicons name="shield-checkmark" size={16} color="#FFD700" />
+                                                <Text style={styles.adminText}>Administrador</Text>
+                                            </View>
+                                        )}
                                     </View>
                                 </View>
                             </View>
@@ -687,7 +697,6 @@ export default function ProfileScreen() {
                             
                         </View>
 
-                        {/* SECCIÓN COMPACTA: Seguidores, Seguidos y Publicaciones */}
                         <View style={styles.compactMetricsContainer}>
                             <TouchableOpacity onPress={navigateToFollowers} style={styles.compactMetricItem}>
                                 <Text style={styles.compactMetricNumber}>{followMetrics.followersCount}</Text>
@@ -726,7 +735,6 @@ export default function ProfileScreen() {
                                     data={userPosts}
                                     keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
                                     renderItem={({ item }) => {
-                                        // El backend devuelve "authorId" en el endpoint /profile/:userId/posts
                                         const postAuthorId = String(item.authorId || '');
                                         const isOwner = String(currentLoggedInId) === postAuthorId;
                                         
@@ -823,7 +831,6 @@ const modalStyles = StyleSheet.create({
         textAlign: 'center',
         width: '100%',
     },
-    // Estilos para modales de confirmación
     confirmModalView: {
         width: '85%',
         margin: 20,
@@ -915,13 +922,11 @@ const styles = StyleSheet.create({
         paddingTop: 20, 
         position: 'relative',
     },
-    
     profileInfoGroup: {
         flexDirection: 'row',
         alignItems: 'center',
         flexShrink: 1,
     },
-    
     backButton: {
         marginRight: 10, 
         padding: 5,
@@ -950,6 +955,22 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#00aaff',
         marginTop: 3,
+    },
+    adminBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 5,
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+    },
+    adminText: {
+        color: '#FFD700',
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginLeft: 4,
     },
     profileDetailsContainer: {
         backgroundColor: 'rgba(255, 255, 255, 0.1)',

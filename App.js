@@ -23,6 +23,8 @@ import OlvidarContraScreen from "./screens/OlvidarContraScreen";
 import SeguidoresScreen from "./screens/SeguidoresScreen"; 
 import SeguidosScreen from "./screens/SeguidosScreen"; 
 
+import AdminPanelScreen from "./screens/AdminPanelScreen";
+
 const Stack = createStackNavigator();
 
 export default function App() {
@@ -60,6 +62,7 @@ export default function App() {
                 <Stack.Screen name="SeguidoresScreen" component={SeguidoresScreen} />
                 <Stack.Screen name="SeguidosScreen" component={SeguidosScreen} />
                 
+                <Stack.Screen name="AdminPanelScreen" component={AdminPanelScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

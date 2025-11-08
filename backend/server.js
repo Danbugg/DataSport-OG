@@ -1506,6 +1506,484 @@ app.get("/jugador/:jugadorId", async (req, res) => {
     }
 });
 
+// ============================================
+// 📍 ENDPOINTS DE ADMINISTRACIÓN
+// ============================================
+// AGREGAR ESTA SECCIÓN COMPLETA DESPUÉS DEL ENDPOINT /jugador/:jugadorId
+// (línea 1089 aproximadamente) Y ANTES DE app.listen (línea 1091)
+
+// Función auxiliar: Verificar si un usuario es admin
+const isAdmin = async (userId) => {
+    try {
+        const result = await pool.query(
+            'SELECT rol_id FROM usuarios WHERE id_usuario = $1',
+            [userId]
+        );
+        return result.rows.length > 0 && result.rows[0].rol_id === 2;
+    } catch (error) {
+        console.error("❌ Error al verificar rol de admin:", error);
+        return false;
+    }
+};
+
+// 1️⃣ GET: Obtener todas las publicaciones reportadas
+app.get('/admin/reported-posts', async (req, res) => {
+    try {
+        // Primero verificamos si la tabla 'reportes' existe
+        const query = `
+            SELECT 
+                p.id,
+                p.content,
+                p.image_url as "imageUrl",
+                p.created_at as "createdAt",
+                p.user_id as "authorId",
+                u.nombre_usuario as "authorUsername",
+                u.foto_perfil as "authorProfilePic",
+                COUNT(DISTINCT r.id_reporte) as "reportCount"
+            FROM posts p
+            INNER JOIN reportes r ON p.id = r.post_id
+            INNER JOIN usuarios u ON p.user_id = u.id_usuario
+            WHERE r.estado = 'pendiente'
+            GROUP BY p.id, p.content, p.image_url, p.created_at, p.user_id,
+                     u.nombre_usuario, u.foto_perfil
+            ORDER BY COUNT(r.id_reporte) DESC, p.created_at DESC
+        `;
+        
+        const result = await pool.query(query);
+        
+        // Corregir URLs de imágenes
+        const posts = result.rows.map(post => {
+            let imageUrl = post.imageUrl;
+            if (imageUrl && !imageUrl.startsWith('http')) {
+                imageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(imageUrl)}`;
+            }
+            
+            let authorProfilePic = post.authorProfilePic;
+            if (authorProfilePic && !authorProfilePic.startsWith('http')) {
+                authorProfilePic = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePic)}`;
+            }
+            
+            return {
+                ...post,
+                imageUrl,
+                authorProfilePic,
+                reportCount: parseInt(post.reportCount)
+            };
+        });
+        
+        res.json({ posts });
+    } catch (error) {
+        console.error('❌ Error al obtener posts reportados:', error);
+        
+        // Si el error es porque la tabla 'reportes' no existe
+        if (error.code === '42P01') {
+            return res.status(503).json({ 
+                error: 'La tabla de reportes no está configurada. Ejecuta las migraciones SQL necesarias.',
+                posts: []
+            });
+        }
+        
+        res.status(500).json({ error: 'Error al cargar publicaciones reportadas' });
+    }
+});
+
+
+// 3️⃣ POST: Descartar reporte// 2️⃣ DELETE: Eliminar publicación (por admin) - CON NOTIFICACIÓN
+app.delete('/admin/posts/:postId', async (req, res) => {
+    const { postId } = req.params;
+    const adminId = safeParseInt(req.body.adminId);
+    const { reason } = req.body; // ✅ NUEVA LÍNEA
+
+    if (!adminId) {
+        return res.status(400).json({ error: 'ID de administrador inválido' });
+    }
+
+    // ✅ VALIDAR RAZÓN
+    if (!reason || reason.trim().length === 0) {
+        return res.status(400).json({ error: 'Debes proporcionar una razón para eliminar la publicación' });
+    }
+
+    try {
+        // Verificar si es admin
+        if (!await isAdmin(adminId)) {
+            return res.status(403).json({ error: 'No tienes permisos de administrador' });
+        }
+
+        // Obtener información del post Y su autor antes de eliminarlo
+        const postQuery = 'SELECT user_id, image_url, content FROM posts WHERE id = $1';
+        const postResult = await pool.query(postQuery, [postId]);
+        
+        if (postResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Publicación no encontrada' });
+        }
+
+        const post = postResult.rows[0];
+        const postAuthorId = post.user_id;
+
+        // ✅ CREAR NOTIFICACIÓN PARA EL AUTOR
+        const notificationMessage = `Tu publicación fue eliminada por un administrador. Razón: ${reason}`;
+        
+        await pool.query(
+            `INSERT INTO notificaciones (user_id, type, message, post_id, is_read, created_at)
+             VALUES ($1, 'post_deleted', $2, $3, FALSE, NOW())`,
+            [postAuthorId, notificationMessage, postId]
+        );
+
+        // Actualizar reportes relacionados
+        try {
+            await pool.query(
+                "UPDATE reportes SET estado = 'resuelto', reason = $1 WHERE post_id = $2",
+                [reason, postId]
+            );
+        } catch (err) {
+            console.log('⚠️ No se pudieron actualizar reportes');
+        }
+
+        // Eliminar la imagen del servidor si existe
+        if (post.image_url) {
+            const imagePath = path.join(uploadDir, path.basename(post.image_url));
+            if (fs.existsSync(imagePath)) {
+                try {
+                    fs.unlinkSync(imagePath);
+                    console.log(`✅ Imagen eliminada: ${imagePath}`);
+                } catch (err) {
+                    console.error("⚠️ Error al eliminar imagen:", err);
+                }
+            }
+        }
+
+        // Eliminar likes
+        await pool.query('DELETE FROM likes WHERE post_id = $1', [postId]);
+        
+        // Eliminar comentarios
+        await pool.query('DELETE FROM comentarios WHERE post_id = $1', [postId]);
+        
+        // Eliminar publicación
+        await pool.query('DELETE FROM posts WHERE id = $1', [postId]);
+
+        console.log(`✅ Admin ${adminId} eliminó publicación ${postId}. Usuario ${postAuthorId} notificado.`);
+        res.json({ message: 'Publicación eliminada y usuario notificado exitosamente' });
+    } catch (error) {
+        console.error('❌ Error al eliminar publicación:', error);
+        res.status(500).json({ error: 'Error al eliminar la publicación' });
+    }
+});
+
+app.post('/admin/reports/:postId/dismiss', async (req, res) => {
+    const { postId } = req.params;
+    const adminId = safeParseInt(req.body.adminId);
+
+    if (!adminId) {
+        return res.status(400).json({ error: 'ID de administrador inválido' });
+    }
+
+    try {
+        // Verificar si es admin
+        if (!await isAdmin(adminId)) {
+            return res.status(403).json({ error: 'No tienes permisos de administrador' });
+        }
+
+        // Actualizar estado de reportes a 'descartado'
+        const result = await pool.query(
+            "UPDATE reportes SET estado = 'descartado' WHERE post_id = $1 AND estado = 'pendiente'",
+            [postId]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'No se encontraron reportes pendientes para esta publicación' });
+        }
+
+        console.log(`✅ Admin ${adminId} descartó reportes del post ${postId}`);
+        res.json({ message: 'Reporte descartado exitosamente' });
+    } catch (error) {
+        console.error('❌ Error al descartar reporte:', error);
+        
+        if (error.code === '42P01') {
+            return res.status(503).json({ 
+                error: 'La tabla de reportes no está configurada.' 
+            });
+        }
+        
+        res.status(500).json({ error: 'Error al descartar el reporte' });
+    }
+});
+
+// 4️⃣ GET: Obtener todos los usuarios
+app.get('/admin/users', async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                id_usuario,
+                nombre,
+                apellido,
+                nombre_usuario,
+                email,
+                foto_perfil,
+                rol_id,
+                COALESCE(estado, 'active') as estado,
+                fecha_registro
+            FROM usuarios
+            ORDER BY 
+                CASE WHEN rol_id = 2 THEN 0 ELSE 1 END,
+                fecha_registro DESC
+        `;
+        
+        const result = await pool.query(query);
+        
+        // Corregir URLs de fotos de perfil
+        const users = result.rows.map(user => {
+            let fotoUrl = user.foto_perfil;
+            if (fotoUrl && !fotoUrl.startsWith('http')) {
+                fotoUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(fotoUrl)}`;
+            }
+            
+            return {
+                ...user,
+                foto_perfil: fotoUrl
+            };
+        });
+        
+        res.json({ users });
+    } catch (error) {
+        console.error('❌ Error al obtener usuarios:', error);
+        res.status(500).json({ error: 'Error al cargar usuarios' });
+    }
+});
+
+// 5️⃣ POST: Suspender/Activar usuario
+app.post('/admin/users/:userId/toggle-status', async (req, res) => {
+    const { userId } = req.params;
+    const adminId = safeParseInt(req.body.adminId);
+
+    if (!adminId) {
+        return res.status(400).json({ error: 'ID de administrador inválido' });
+    }
+
+    try {
+        // Verificar si es admin
+        if (!await isAdmin(adminId)) {
+            return res.status(403).json({ error: 'No tienes permisos de administrador' });
+        }
+
+        // Verificar que no intente suspenderse a sí mismo
+        if (parseInt(userId) === adminId) {
+            return res.status(400).json({ error: 'No puedes cambiar tu propio estado' });
+        }
+
+        // Verificar que el usuario a suspender no sea admin
+        if (await isAdmin(userId)) {
+            return res.status(400).json({ error: 'No puedes cambiar el estado de otro administrador' });
+        }
+
+        // Obtener estado actual (si no existe la columna, usar 'active' por defecto)
+        const currentStatus = await pool.query(
+            "SELECT COALESCE(estado, 'active') as estado FROM usuarios WHERE id_usuario = $1",
+            [userId]
+        );
+
+        if (currentStatus.rows.length === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado' });
+        }
+
+        const newStatus = currentStatus.rows[0].estado === 'suspended' ? 'active' : 'suspended';
+
+        // Actualizar estado
+        // Si la columna 'estado' no existe, esto fallará y deberás ejecutar la migración SQL
+        const updateResult = await pool.query(
+            'UPDATE usuarios SET estado = $1 WHERE id_usuario = $2',
+            [newStatus, userId]
+        );
+
+        console.log(`✅ Admin ${adminId} cambió estado de usuario ${userId} a ${newStatus}`);
+        res.json({ 
+            message: `Usuario ${newStatus === 'suspended' ? 'suspendido' : 'activado'} exitosamente`,
+            newStatus 
+        });
+    } catch (error) {
+        console.error('❌ Error al cambiar estado de usuario:', error);
+        
+        // Si el error es porque la columna 'estado' no existe
+        if (error.code === '42703') {
+            return res.status(503).json({ 
+                error: 'La columna estado no existe. Ejecuta: ALTER TABLE usuarios ADD COLUMN estado VARCHAR(20) DEFAULT \'active\';' 
+            });
+        }
+        
+        res.status(500).json({ error: 'Error al cambiar el estado del usuario' });
+    }
+});
+
+// 6️⃣ GET: Obtener estadísticas generales
+app.get('/admin/stats', async (req, res) => {
+    try {
+        // Total de usuarios
+        const totalUsersResult = await pool.query('SELECT COUNT(*) as count FROM usuarios');
+        const totalUsers = parseInt(totalUsersResult.rows[0].count);
+
+        // Total de publicaciones
+        const totalPostsResult = await pool.query('SELECT COUNT(*) as count FROM posts');
+        const totalPosts = parseInt(totalPostsResult.rows[0].count);
+
+        // Total de reportes pendientes (con manejo de error si la tabla no existe)
+        let totalReports = 0;
+        try {
+            const totalReportsResult = await pool.query(
+                "SELECT COUNT(DISTINCT post_id) as count FROM reportes WHERE estado = 'pendiente'"
+            );
+            totalReports = parseInt(totalReportsResult.rows[0].count);
+        } catch (err) {
+            console.log('⚠️ No se pudo obtener conteo de reportes (tabla puede no existir)');
+        }
+
+        // Usuarios activos (con al menos una publicación en los últimos 30 días)
+        const activeUsersResult = await pool.query(`
+            SELECT COUNT(DISTINCT user_id) as count 
+            FROM posts 
+            WHERE created_at >= NOW() - INTERVAL '30 days'
+        `);
+        const activeUsers = parseInt(activeUsersResult.rows[0].count);
+
+        res.json({
+            totalUsers,
+            totalPosts,
+            totalReports,
+            activeUsers,
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener estadísticas:', error);
+        res.status(500).json({ error: 'Error al cargar estadísticas' });
+    }
+});
+
+// 7️⃣ POST: Reportar una publicación (endpoint para usuarios normales)
+app.post('/posts/:postId/report', async (req, res) => {
+    const { postId } = req.params;
+    const reporterId = safeParseInt(req.body.reporterId);
+
+    if (!reporterId) {
+        return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    try {
+        // Verificar que la publicación existe
+        const postCheck = await pool.query('SELECT id FROM posts WHERE id = $1', [postId]);
+        if (postCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Publicación no encontrada' });
+        }
+
+        // Verificar que el usuario no haya reportado ya esta publicación
+        const existingReport = await pool.query(
+            'SELECT id_reporte FROM reportes WHERE post_id = $1 AND reporter_id = $2',
+            [postId, reporterId]
+        );
+
+        if (existingReport.rows.length > 0) {
+            return res.status(400).json({ error: 'Ya has reportado esta publicación' });
+        }
+
+        // Insertar el reporte
+        await pool.query(
+            `INSERT INTO reportes (post_id, reporter_id, estado, created_at) 
+             VALUES ($1, $2, 'pendiente', NOW())`,
+            [postId, reporterId]
+        );
+
+        console.log(`✅ Usuario ${reporterId} reportó publicación ${postId}`);
+        res.status(201).json({ message: 'Reporte enviado exitosamente' });
+    } catch (error) {
+        console.error('❌ Error al reportar publicación:', error);
+        
+        if (error.code === '42P01') {
+            return res.status(503).json({ 
+                error: 'El sistema de reportes no está configurado. Contacta al administrador.' 
+            });
+        }
+        
+        res.status(500).json({ error: 'Error al enviar el reporte' });
+    }
+});
+
+// ============================================
+// 📬 ENDPOINTS DE NOTIFICACIONES
+// ============================================
+
+// 1️⃣ GET: Obtener notificaciones de un usuario
+app.get('/notifications/:userId', async (req, res) => {
+    const { userId } = req.params;
+    
+    try {
+        const notifications = await pool.query(
+            `SELECT 
+                id,
+                user_id as "userId",
+                type,
+                message,
+                post_id as "postId",
+                is_read as "isRead",
+                created_at as "createdAt"
+            FROM notificaciones
+            WHERE user_id = $1
+            ORDER BY created_at DESC
+            LIMIT 50`,
+            [userId]
+        );
+
+        const unreadCount = await pool.query(
+            'SELECT COUNT(*) as count FROM notificaciones WHERE user_id = $1 AND is_read = FALSE',
+            [userId]
+        );
+
+        res.json({
+            notifications: notifications.rows,
+            unreadCount: parseInt(unreadCount.rows[0].count)
+        });
+    } catch (error) {
+        console.error('❌ Error al obtener notificaciones:', error);
+        res.status(500).json({ error: 'Error al obtener notificaciones' });
+    }
+});
+
+// 2️⃣ PUT: Marcar una notificación como leída
+app.put('/notifications/:notificationId/read', async (req, res) => {
+    const { notificationId } = req.params;
+    const userId = safeParseInt(req.body.userId);
+
+    if (!userId) {
+        return res.status(400).json({ error: 'ID de usuario inválido' });
+    }
+
+    try {
+        await pool.query(
+            'UPDATE notificaciones SET is_read = TRUE WHERE id = $1 AND user_id = $2',
+            [notificationId, userId]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Error al marcar notificación como leída:', error);
+        res.status(500).json({ error: 'Error al actualizar notificación' });
+    }
+});
+
+// 3️⃣ PUT: Marcar todas las notificaciones como leídas
+app.put('/notifications/:userId/read-all', async (req, res) => {
+    const { userId } = req.params;
+
+    try {
+        await pool.query(
+            'UPDATE notificaciones SET is_read = TRUE WHERE user_id = $1 AND is_read = FALSE',
+            [userId]
+        );
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('❌ Error al marcar todas como leídas:', error);
+        res.status(500).json({ error: 'Error al actualizar notificaciones' });
+    }
+});
+
+// FIN DE ENDPOINTS DE NOTIFICACIONES
+
 // ------------------ INICIO SERVIDOR ------------------
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);

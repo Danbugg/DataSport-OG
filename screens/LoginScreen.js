@@ -6,10 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   ImageBackground,
-  Alert,
   KeyboardAvoidingView,
   ScrollView,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -23,6 +23,14 @@ export default function LoginScreen({ navigation }) {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [lockoutTime, setLockoutTime] = useState(0);
+
+  // Estados para modales personalizados
+  const [errorModalVisible, setErrorModalVisible] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [warningModalVisible, setWarningModalVisible] = useState(false);
+  const [warningMessage, setWarningMessage] = useState('');
 
   useEffect(() => {
     const checkLockoutStatus = async () => {
@@ -41,10 +49,8 @@ export default function LoginScreen({ navigation }) {
         if (remainingTime > 0) {
           setIsLocked(true);
           setLockoutTime(Math.ceil(remainingTime / 1000));
-          Alert.alert(
-            "Bloqueado",
-            `Demasiados intentos. Intenta de nuevo en ${Math.ceil(remainingTime / 60000)} minutos.`
-          );
+          setWarningMessage(`Demasiados intentos. Intenta de nuevo en ${Math.ceil(remainingTime / 60000)} minutos.`);
+          setWarningModalVisible(true);
         } else {
           setIsLocked(false);
           setFailedAttempts(0);
@@ -78,15 +84,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (isLocked) {
-      Alert.alert(
-        "Cuenta bloqueada",
-        `Tu cuenta está bloqueada. Por favor, espera ${Math.floor(lockoutTime / 60)}:${('0' + (lockoutTime % 60)).slice(-2)} antes de intentarlo de nuevo.`
-      );
+      setWarningMessage(`Tu cuenta está bloqueada. Por favor, espera ${Math.floor(lockoutTime / 60)}:${('0' + (lockoutTime % 60)).slice(-2)} antes de intentarlo de nuevo.`);
+      setWarningModalVisible(true);
       return;
     }
 
     if (!email || !password) {
-      Alert.alert("Error", "Por favor ingresa correo y contraseña");
+      setErrorMessage("Por favor ingresa correo y contraseña");
+      setErrorModalVisible(true);
       return;
     }
 
@@ -109,8 +114,13 @@ export default function LoginScreen({ navigation }) {
         await AsyncStorage.setItem('userId', String(data.usuario.id_usuario));
 
         const usuario = data.usuario;
-        Alert.alert("Te damos la bienvenida a DataSport", `Has iniciado sesión como ${usuario.nombre_usuario}`);
-        navigation.navigate("MainTabs", { userId: usuario.id_usuario });
+        setSuccessMessage(`Has iniciado sesión como ${usuario.nombre_usuario}`);
+        setSuccessModalVisible(true);
+        
+        // Navegar después de cerrar el modal de éxito
+        setTimeout(() => {
+          navigation.navigate("MainTabs", { userId: usuario.id_usuario });
+        }, 1500);
       } else {
         const newAttempts = failedAttempts + 1;
         setFailedAttempts(newAttempts);
@@ -122,26 +132,113 @@ export default function LoginScreen({ navigation }) {
           setIsLocked(true);
           setLockoutTime(1 * 60);
           await AsyncStorage.setItem("lockoutTime", lockoutTimestamp.toString());
-          Alert.alert(
-            "Demasiados intentos",
-            "Has fallado 3 veces. Tu cuenta ha sido bloqueada por 1 minuto."
-          );
+          setWarningMessage("Has fallado 3 veces. Tu cuenta ha sido bloqueada por 1 minuto.");
+          setWarningModalVisible(true);
         } else {
-          Alert.alert(
-            "Error",
-            `${data.error || "Credenciales inválidas"}. Te quedan ${3 - newAttempts} intentos.`
-          );
+          setErrorMessage(`${data.error || "Credenciales inválidas"}. Te quedan ${3 - newAttempts} intentos.`);
+          setErrorModalVisible(true);
         }
       }
     } catch (error) {
       console.error("Error en fetch:", error);
-      Alert.alert("Error", "No se pudo conectar al servidor");
+      setErrorMessage("No se pudo conectar al servidor");
+      setErrorModalVisible(true);
     } finally {
       setLoading(false);
     }
   };
 
   const fondoLogin = require("../assets/fondoLogin.jpg");
+
+  // --- MODAL DE ERROR ---
+  const ErrorModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={errorModalVisible}
+      onRequestClose={() => setErrorModalVisible(false)}
+    >
+      <TouchableOpacity 
+        style={modalStyles.centeredView} 
+        activeOpacity={1}
+        onPress={() => setErrorModalVisible(false)}
+      >
+        <View style={modalStyles.errorModalView}>
+          <Ionicons name="close-circle" size={60} color="#ff3333" style={{ marginBottom: 15 }} />
+          
+          <Text style={modalStyles.errorTitle}>Error</Text>
+          <Text style={modalStyles.errorMessage}>{errorMessage}</Text>
+
+          <TouchableOpacity
+            style={modalStyles.errorButton}
+            onPress={() => setErrorModalVisible(false)}
+          >
+            <Text style={modalStyles.errorButtonText}>Aceptar</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // --- MODAL DE ÉXITO ---
+  const SuccessModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={successModalVisible}
+      onRequestClose={() => setSuccessModalVisible(false)}
+    >
+      <TouchableOpacity 
+        style={modalStyles.centeredView} 
+        activeOpacity={1}
+        onPress={() => setSuccessModalVisible(false)}
+      >
+        <View style={modalStyles.successModalView}>
+          <Ionicons name="checkmark-circle" size={60} color="#002affff" style={{ marginBottom: 15 }} />
+          
+          <Text style={modalStyles.successTitle}>¡Bienvenido a DataSport!</Text>
+          <Text style={modalStyles.successMessage}>{successMessage}</Text>
+
+          <TouchableOpacity
+            style={modalStyles.successButton}
+            onPress={() => setSuccessModalVisible(false)}
+          >
+            <Text style={modalStyles.successButtonText}>Continuar</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  // --- MODAL DE ADVERTENCIA ---
+  const WarningModal = () => (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={warningModalVisible}
+      onRequestClose={() => setWarningModalVisible(false)}
+    >
+      <TouchableOpacity 
+        style={modalStyles.centeredView} 
+        activeOpacity={1}
+        onPress={() => setWarningModalVisible(false)}
+      >
+        <View style={modalStyles.warningModalView}>
+          <Ionicons name="warning-outline" size={60} color="#ffcc00" style={{ marginBottom: 15 }} />
+          
+          <Text style={modalStyles.warningTitle}>Cuenta Bloqueada</Text>
+          <Text style={modalStyles.warningMessage}>{warningMessage}</Text>
+
+          <TouchableOpacity
+            style={modalStyles.warningButton}
+            onPress={() => setWarningModalVisible(false)}
+          >
+            <Text style={modalStyles.warningButtonText}>Entendido</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
 
   return (
     <ImageBackground source={fondoLogin} style={styles.background}>
@@ -234,10 +331,149 @@ export default function LoginScreen({ navigation }) {
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
+
+      {/* Modales personalizados */}
+      <ErrorModal />
+      <SuccessModal />
+      <WarningModal />
     </ImageBackground>
   );
 }
 
+// --- ESTILOS DE LOS MODALES ---
+const modalStyles = StyleSheet.create({
+  centeredView: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  },
+  // Modal de Error
+  errorModalView: {
+    width: '85%',
+    margin: 20,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: '#ff3333',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  errorTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ff3333',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  errorButton: {
+    backgroundColor: '#ff3333',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+  },
+  errorButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Modal de Éxito
+  successModalView: {
+    width: '85%',
+    margin: 20,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: '#7dd8ffff',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2e24f1ff',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  successButton: {
+    backgroundColor: '#3799faff',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+  },
+  successButtonText: {
+    color: '#1a1a1a',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  // Modal de Advertencia
+  warningModalView: {
+    width: '85%',
+    margin: 20,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: '#ffcc00',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  warningTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ffcc00',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  warningMessage: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  warningButton: {
+    backgroundColor: '#ffcc00',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 15,
+    width: '100%',
+    alignItems: 'center',
+  },
+  warningButtonText: {
+    color: '#1a1a1a',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});
+
+// --- ESTILOS PRINCIPALES ---
 const styles = StyleSheet.create({
   background: { flex: 1, justifyContent: "center", alignItems: "center" },
   overlay: {
