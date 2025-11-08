@@ -257,30 +257,124 @@ app.post("/forgot-password", async (req, res) => {
         console.log(`🔑 Token generado: ${resetToken}`);
 
         try {
-            // ✅ USAR RESEND PARA ENVIAR EL EMAIL
             const emailResponse = await resend.emails.send({
                 from: 'DataSport <onboarding@resend.dev>',
                 to: [email],
                 subject: '🔐 Código de recuperación - DataSport',
                 html: `
-                    <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
-                        <h1 style="color: #333; text-align: center;">Recuperación de Contraseña</h1>
-                        <p style="font-size: 16px;">Hola ${user.nombre},</p>
-                        <p style="font-size: 16px;">Recibimos una solicitud para restablecer tu contraseña. Tu código de verificación es:</p>
-                        <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-                            <h2 style="color: #333; letter-spacing: 8px; margin: 0; font-size: 32px;">${resetToken}</h2>
-                        </div>
-                        <p style="font-size: 14px; color: #666;">
-                            Este código expira en <strong>1 hora</strong>.
-                        </p>
-                        <p style="font-size: 14px; color: #999; margin-top: 30px;">
-                            Si no solicitaste este código, puedes ignorar este mensaje de forma segura.
-                        </p>
-                        <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                        <p style="font-size: 12px; color: #999; text-align: center;">
-                            © 2024 DataSport. Todos los derechos reservados.
-                        </p>
-                    </div>
+                <!DOCTYPE html>
+                <html lang="es">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Recuperación de Contraseña</title>
+                </head>
+                <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fa;">
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f7fa; padding: 40px 0;">
+                        <tr>
+                            <td align="center">
+                                <!-- Container Principal -->
+                                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                                    
+                                    <!-- Header con Gradiente -->
+                                    <tr>
+                                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+                                            <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: 1px;">
+                                                ⚽ DataSport
+                                            </h1>
+                                            <p style="margin: 10px 0 0 0; color: #e0e7ff; font-size: 14px;">
+                                                Tu plataforma deportiva de confianza
+                                            </p>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Contenido Principal -->
+                                    <tr>
+                                        <td style="padding: 40px 30px;">
+                                            <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px; font-weight: 600;">
+                                                Hola, ${user.nombre} 👋
+                                            </h2>
+                                            
+                                            <p style="margin: 0 0 20px 0; color: #555555; font-size: 16px; line-height: 1.6;">
+                                                Recibimos una solicitud para restablecer la contraseña de tu cuenta. 
+                                                Usa el siguiente código de verificación para continuar:
+                                            </p>
+                                            
+                                            <!-- Token Box -->
+                                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+                                                <tr>
+                                                    <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; padding: 30px; text-align: center;">
+                                                        <p style="margin: 0 0 10px 0; color: #ffffff; font-size: 14px; text-transform: uppercase; letter-spacing: 2px;">
+                                                            Tu código de verificación
+                                                        </p>
+                                                        <h1 style="margin: 0; color: #ffffff; font-size: 48px; font-weight: bold; letter-spacing: 12px; font-family: 'Courier New', monospace;">
+                                                            ${resetToken}
+                                                        </h1>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                            
+                                            <!-- Información Importante -->
+                                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fff9e6; border-left: 4px solid #ffc107; border-radius: 6px; padding: 15px; margin: 25px 0;">
+                                                <tr>
+                                                    <td>
+                                                        <p style="margin: 0; color: #856404; font-size: 14px; line-height: 1.6;">
+                                                            ⏰ <strong>Importante:</strong> Este código expira en <strong>1 hora</strong>.
+                                                        </p>
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                            
+                                            <p style="margin: 20px 0 0 0; color: #777777; font-size: 14px; line-height: 1.6;">
+                                                Si no solicitaste este código, puedes ignorar este correo de forma segura. 
+                                                Tu cuenta permanecerá protegida.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Separador -->
+                                    <tr>
+                                        <td style="padding: 0 30px;">
+                                            <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 0;">
+                                        </td>
+                                    </tr>
+                                    
+                                    <!-- Footer -->
+                                    <tr>
+                                        <td style="background-color: #f8f9fa; padding: 30px; text-align: center;">
+                                            <p style="margin: 0 0 10px 0; color: #999999; font-size: 13px;">
+                                                ¿Necesitas ayuda? Contáctanos en 
+                                                <a href="mailto:soporte@datasport.com" style="color: #667eea; text-decoration: none;">soporte@datasport.com</a>
+                                            </p>
+                                            <p style="margin: 0; color: #aaaaaa; font-size: 12px;">
+                                                © 2024 DataSport. Todos los derechos reservados.
+                                            </p>
+                                            <div style="margin-top: 20px;">
+                                                <a href="#" style="display: inline-block; margin: 0 10px; color: #999999; text-decoration: none; font-size: 20px;">📱</a>
+                                                <a href="#" style="display: inline-block; margin: 0 10px; color: #999999; text-decoration: none; font-size: 20px;">🌐</a>
+                                                <a href="#" style="display: inline-block; margin: 0 10px; color: #999999; text-decoration: none; font-size: 20px;">📧</a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    
+                                </table>
+                                
+                                <!-- Nota de Seguridad -->
+                                <table width="600" cellpadding="0" cellspacing="0" style="margin-top: 20px;">
+                                    <tr>
+                                        <td style="text-align: center; padding: 0 30px;">
+                                            <p style="margin: 0; color: #999999; font-size: 11px; line-height: 1.5;">
+                                                🔒 Este es un correo automatizado. Por tu seguridad, nunca compartas este código con nadie.
+                                            </p>
+                                        </td>
+                                    </tr>
+                                </table>
+                                
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
                 `
             });
 
@@ -299,6 +393,7 @@ app.post("/forgot-password", async (req, res) => {
         console.error("❌ Error en /forgot-password:", error);
         res.status(500).json({ error: "Error en el servidor." });
     }
+    
 });
 
 app.post("/verify-token", async (req, res) => {
