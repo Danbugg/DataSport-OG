@@ -1,114 +1,186 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     View,
     Text,
-    Image,
-    FlatList,
-    ActivityIndicator,
     StyleSheet,
+    ActivityIndicator,
+    ScrollView,
     TouchableOpacity,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 
 const API_BASE_URL = "http://localhost:3000";
 
-export default function DetalleEquipoScreen({ route, navigation }) {
-    const { itemId, itemData } = route.params; // itemId = id_equipo
-    const [equipo, setEquipo] = useState(itemData || null);
+export default function DetalleEquipoScreen({ route }) {
+    const navigation = useNavigation();
+    const { itemId } = route.params;
+
+    const [equipo, setEquipo] = useState(null);
     const [jugadores, setJugadores] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        obtenerJugadores();
-    }, [itemId]); // Dependencia en itemId para recargar si cambia
+        cargarDetalleEquipo();
+    }, []);
 
-    const obtenerJugadores = async () => {
-        setLoading(true);
+    const cargarDetalleEquipo = async () => {
         try {
-            const url = `${API_BASE_URL}/equipos/${itemId}/jugadores`;
-            console.log(`[CLIENTE] Llamando a URL: ${url}`); // Log de la URL
+            const response = await fetch(`${API_BASE_URL}/equipo/${itemId}`);
+            const data = await response.json();
             
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                // Si la respuesta no es 200, lanzamos un error que se captura abajo
-                throw new Error(`Error en la API: ${response.status}`);
+            if (data.error) {
+                console.error("Error al cargar equipo:", data.error);
+                return;
             }
 
-            // Usamos response.json() directamente para obtener los datos
-            const data = await response.json();
-            console.log("Jugadores recibidos (JSON):", data);
-
-            // La API debe devolver directamente el array de jugadores
-            setJugadores(data || []); 
-
+            setEquipo(data);
+            setJugadores(data.jugadores || []);
         } catch (error) {
-            console.error("Error al obtener jugadores del equipo:", error);
-            // Mostrar un error más amigable si el servidor está caído
-            // o devuelve un formato inesperado
-            setJugadores([]); 
+            console.error("Error al cargar detalle de equipo:", error);
         } finally {
             setLoading(false);
         }
     };
 
-    const renderJugador = ({ item }) => (
-        <TouchableOpacity
-            style={styles.jugadorCard}
-            onPress={() =>
-                navigation.navigate("DetalleJugadorScreen", {
-                    itemId: item.id_jugador,
-                    itemData: item,
-                })
-            }
-        >
-            {item.foto ? (
-                <Image source={{ uri: item.foto }} style={styles.jugadorImagen} />
-            ) : (
-                <View style={styles.jugadorPlaceholder} />
-            )}
-            <View>
-                <Text style={styles.jugadorNombre}>{item.nombre}</Text>
-                <Text style={styles.jugadorPosicion}>{item.posicion}</Text>
-            </View>
-        </TouchableOpacity>
-    );
+    const navegarAJugador = (jugador) => {
+        navigation.navigate("DetalleJugadorScreen", {
+            itemId: jugador.id_jugador || jugador.id,
+            itemData: jugador,
+        });
+    };
+
+    // Agrupar jugadores por posición
+    const jugadoresPorPosicion = {
+        Portero: jugadores.filter(j => j.posicion === 'Portero'),
+        Defensa: jugadores.filter(j => j.posicion === 'Defensa'),
+        Centrocampista: jugadores.filter(j => j.posicion === 'Centrocampista'),
+        Delantero: jugadores.filter(j => j.posicion === 'Delantero'),
+    };
 
     if (loading) {
         return (
-            <View style={styles.centered}>
+            <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#00aaff" />
+                <Text style={styles.loadingText}>Cargando equipo...</Text>
+            </View>
+        );
+    }
+
+    if (!equipo) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>No se pudo cargar la información del equipo</Text>
             </View>
         );
     }
 
     return (
-        <View style={styles.container}>
-            {equipo && (
-                <View style={styles.header}>
-                    {equipo.logo ? (
-                        <Image source={{ uri: equipo.logo }} style={styles.logo} />
-                    ) : (
-                        <View style={styles.logoPlaceholder} />
-                    )}
-                    <Text style={styles.nombre}>{equipo.nombre}</Text>
+        <ScrollView style={styles.container}>
+            {/* Header del Equipo */}
+            <View style={styles.header}>
+                <View style={styles.logoPlaceholder}>
+                    <Text style={styles.logoText}>⚽</Text>
                 </View>
-            )}
+                <Text style={styles.nombreEquipo}>{equipo.nombre}</Text>
+                {equipo.ciudad && (
+                    <Text style={styles.ciudad}>📍 {equipo.ciudad}</Text>
+                )}
+                {equipo.liga_nombre && (
+                    <View style={styles.ligaBadge}>
+                        <Text style={styles.ligaText}>{equipo.liga_nombre}</Text>
+                    </View>
+                )}
+            </View>
 
-            <Text style={styles.subtitulo}>Jugadores</Text>
+            {/* Información del equipo */}
+            <View style={styles.infoContainer}>
+                {equipo.estadio && (
+                    <View style={styles.infoCard}>
+                        <Text style={styles.infoLabel}>Estadio</Text>
+                        <Text style={styles.infoValue}>{equipo.estadio}</Text>
+                    </View>
+                )}
+                
+                <View style={styles.infoCard}>
+                    <Text style={styles.infoLabel}>Plantilla</Text>
+                    <Text style={styles.infoValue}>{jugadores.length} jugadores</Text>
+                </View>
 
-            {jugadores.length === 0 ? (
-                <Text style={styles.noJugadores}>No hay jugadores registrados.</Text>
-            ) : (
-                <FlatList
-                    data={jugadores}
-                    keyExtractor={(item) =>
-                        item.id_jugador?.toString() || item.elementId?.toString() || Math.random().toString()
-                    }
-                    renderItem={renderJugador}
-                    contentContainerStyle={styles.lista}
-                />
-            )}
-        </View>
+                {equipo.liga_pais && (
+                    <View style={styles.infoCard}>
+                        <Text style={styles.infoLabel}>País</Text>
+                        <Text style={styles.infoValue}>{equipo.liga_pais}</Text>
+                    </View>
+                )}
+            </View>
+
+            {/* Plantilla por posiciones */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                    Plantilla ({jugadores.length})
+                </Text>
+
+                {jugadores.length === 0 ? (
+                    <Text style={styles.noDataText}>
+                        No hay jugadores registrados en este equipo
+                    </Text>
+                ) : (
+                    Object.entries(jugadoresPorPosicion).map(([posicion, jugadoresPosicion]) => {
+                        if (jugadoresPosicion.length === 0) return null;
+                        
+                        return (
+                            <View key={posicion} style={styles.posicionGroup}>
+                                <Text style={styles.posicionTitle}>
+                                    {posicion === 'Portero' && '🧤 '}
+                                    {posicion === 'Defensa' && '🛡️ '}
+                                    {posicion === 'Centrocampista' && '⚙️ '}
+                                    {posicion === 'Delantero' && '⚡ '}
+                                    {posicion} ({jugadoresPosicion.length})
+                                </Text>
+                                
+                                {jugadoresPosicion.map((jugador, index) => (
+                                    <TouchableOpacity
+                                        key={jugador.id_jugador || jugador.id || index}
+                                        style={styles.jugadorCard}
+                                        onPress={() => navegarAJugador(jugador)}
+                                    >
+                                        <View style={styles.jugadorFotoPlaceholder}>
+                                            <Text style={styles.jugadorFotoText}>👤</Text>
+                                        </View>
+                                        <View style={styles.jugadorInfo}>
+                                            <Text style={styles.jugadorNombre}>{jugador.nombre}</Text>
+                                            {jugador.nacionalidad && (
+                                                <Text style={styles.jugadorNacionalidad}>
+                                                    🌍 {jugador.nacionalidad}
+                                                </Text>
+                                            )}
+                                            <View style={styles.jugadorStats}>
+                                                {jugador.edad && (
+                                                    <Text style={styles.jugadorStat}>
+                                                        {jugador.edad} años
+                                                    </Text>
+                                                )}
+                                                {jugador.goles > 0 && (
+                                                    <Text style={styles.jugadorStat}>
+                                                        ⚽ {jugador.goles}
+                                                    </Text>
+                                                )}
+                                                {jugador.asistencias > 0 && (
+                                                    <Text style={styles.jugadorStat}>
+                                                        🎯 {jugador.asistencias}
+                                                    </Text>
+                                                )}
+                                            </View>
+                                        </View>
+                                        <Text style={styles.arrow}>›</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        );
+                    })
+                )}
+            </View>
+        </ScrollView>
     );
 }
 
@@ -116,86 +188,172 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#000",
-        padding: 16,
     },
-    centered: {
+    loadingContainer: {
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
         backgroundColor: "#000",
     },
+    loadingText: {
+        color: "#fff",
+        marginTop: 10,
+        fontSize: 16,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#000",
+        padding: 20,
+    },
+    errorText: {
+        color: "#ff4444",
+        fontSize: 16,
+        textAlign: "center",
+    },
     header: {
         alignItems: "center",
-        marginBottom: 20,
-    },
-    logo: {
-        width: 100,
-        height: 100,
-        resizeMode: "contain",
-        marginBottom: 10,
+        paddingVertical: 30,
+        backgroundColor: "#1a1a1a",
+        borderBottomWidth: 2,
+        borderBottomColor: "#00aaff",
     },
     logoPlaceholder: {
-        width: 100,
-        height: 100,
-        backgroundColor: "#222",
-        borderRadius: 50,
-        marginBottom: 10,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: "#333",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 15,
+        borderWidth: 3,
+        borderColor: "#00aaff",
     },
-    nombre: {
+    logoText: {
+        fontSize: 50,
+    },
+    nombreEquipo: {
+        fontSize: 28,
+        fontWeight: "bold",
         color: "#fff",
-        fontSize: 24,
-        fontWeight: "bold",
+        textAlign: "center",
+        marginBottom: 5,
+        paddingHorizontal: 20,
     },
-    subtitulo: {
-        color: "#ff0000",
-        fontSize: 20,
+    ciudad: {
+        fontSize: 16,
+        color: "#aaa",
+        marginTop: 5,
+    },
+    ligaBadge: {
+        backgroundColor: "#ff0000",
+        paddingHorizontal: 15,
+        paddingVertical: 5,
+        borderRadius: 15,
+        marginTop: 10,
+    },
+    ligaText: {
+        color: "#fff",
         fontWeight: "bold",
+        fontSize: 14,
+    },
+    infoContainer: {
+        padding: 16,
+    },
+    infoCard: {
+        backgroundColor: "#1a1a1a",
+        padding: 16,
+        borderRadius: 12,
         marginBottom: 10,
+        borderLeftWidth: 4,
+        borderLeftColor: "#00aaff",
     },
-    lista: {
-        paddingBottom: 20,
+    infoLabel: {
+        fontSize: 14,
+        color: "#aaa",
+        marginBottom: 5,
+    },
+    infoValue: {
+        fontSize: 18,
+        color: "#fff",
+        fontWeight: "600",
+    },
+    section: {
+        padding: 16,
+        paddingTop: 0,
+    },
+    sectionTitle: {
+        fontSize: 22,
+        fontWeight: "bold",
+        color: "#ff0000",
+        marginBottom: 15,
+    },
+    noDataText: {
+        color: "#999",
+        fontSize: 16,
+        textAlign: "center",
+        marginTop: 20,
+    },
+    posicionGroup: {
+        marginBottom: 20,
+    },
+    posicionTitle: {
+        fontSize: 18,
+        fontWeight: "bold",
+        color: "#00aaff",
+        marginBottom: 10,
+        paddingLeft: 5,
     },
     jugadorCard: {
         flexDirection: "row",
         alignItems: "center",
         backgroundColor: "#1a1a1a",
-        padding: 10,
+        padding: 12,
         borderRadius: 10,
         marginBottom: 8,
         borderLeftWidth: 3,
-        borderLeftColor: "#00aaff",
+        borderLeftColor: "#333",
     },
-    jugadorImagen: {
-        width: 60,
-        height: 60,
-        borderRadius: 8,
-        marginRight: 15,
-        borderWidth: 1,
-        borderColor: "#00aaff",
-        resizeMode: "contain",
-    },
-    jugadorPlaceholder: {
-        width: 60,
-        height: 60,
-        borderRadius: 8,
-        marginRight: 15,
+    jugadorFotoPlaceholder: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         backgroundColor: "#333",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: 12,
         borderWidth: 1,
         borderColor: "#00aaff",
+    },
+    jugadorFotoText: {
+        fontSize: 24,
+    },
+    jugadorInfo: {
+        flex: 1,
     },
     jugadorNombre: {
-        color: "#fff",
         fontSize: 16,
         fontWeight: "600",
+        color: "#fff",
+        marginBottom: 3,
     },
-    jugadorPosicion: {
+    jugadorNacionalidad: {
+        fontSize: 13,
         color: "#aaa",
-        fontSize: 14,
+        marginBottom: 3,
     },
-    noJugadores: {
-        color: "#888",
-        fontSize: 16,
-        textAlign: "center",
-        marginTop: 20,
+    jugadorStats: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    jugadorStat: {
+        fontSize: 12,
+        color: "#00aaff",
+    },
+    arrow: {
+        fontSize: 24,
+        color: "#00aaff",
+        fontWeight: "300",
     },
 });

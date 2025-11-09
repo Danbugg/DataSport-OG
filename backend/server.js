@@ -1058,69 +1058,89 @@ app.delete("/delete-account/:userId", async (req, res) => {
     }
 });
 
-// ------------------ BÚSQUEDA NEO4J + POSTGRESQL ------------------
+// ------------------ BÚSQUEDA POSTGRESQL ------------------
 app.get("/buscar", async (req, res) => {
     const termino = req.query.q || "";
     if (termino.length < 1) {
-        // Devuelve un array vacío si no hay término de búsqueda
         return res.json({ ligas: [], equipos: [], jugadores: [], usuarios: [] });
     }
    
-    // Convertir el término a minúsculas para comparaciones
     const terminoBusqueda = termino.toLowerCase();
 
-    // 1. BÚSQUEDA EN NEO4J (Ligas, Equipos, Jugadores)
-    const neo4jSession = driver.session();
-    let neo4jResults = { ligas: [], equipos: [], jugadores: [] };
-
     try {
-        const result = await neo4jSession.run(
-            `
-            MATCH (l:Liga)
-            WHERE toLower(l.nombre) CONTAINS toLower($termino)
-            WITH collect(l {.*, elementId: toString(elementId(l)), id_liga: ID(l)}) AS ligas
+        // 1. BÚSQUEDA DE LIGAS
+        const ligasQuery = `
+            SELECT 
+                id,
+                nombre,
+                pais,
+                nivel,
+                id::text AS "elementId"
+            FROM ligas
+            WHERE LOWER(nombre) LIKE $1 OR LOWER(pais) LIKE $1
+            ORDER BY nombre
+            LIMIT 10;
+        `;
+        const ligasResult = await pool.query(ligasQuery, [`%${terminoBusqueda}%`]);
+        const ligas = ligasResult.rows.map(liga => ({
+            ...liga,
+            id_liga: liga.id
+        }));
 
-            OPTIONAL MATCH (e:Equipo)
-            WHERE toLower(e.nombre) CONTAINS toLower($termino)
-            WITH ligas, collect(e {.*, elementId: toString(elementId(e)), id_equipo: ID(e)}) AS equipos
+        // 2. BÚSQUEDA DE EQUIPOS
+        const equiposQuery = `
+            SELECT 
+                e.id,
+                e.nombre,
+                e.ciudad,
+                e.estadio,
+                e.liga_id,
+                l.nombre as liga_nombre,
+                e.id::text AS "elementId"
+            FROM equipos e
+            LEFT JOIN ligas l ON e.liga_id = l.id
+            WHERE LOWER(e.nombre) LIKE $1 OR LOWER(e.ciudad) LIKE $1
+            ORDER BY e.nombre
+            LIMIT 10;
+        `;
+        const equiposResult = await pool.query(equiposQuery, [`%${terminoBusqueda}%`]);
+        const equipos = equiposResult.rows.map(equipo => ({
+            ...equipo,
+            id_equipo: equipo.id
+        }));
 
-            OPTIONAL MATCH (j:Jugador)
-            WHERE toLower(j.nombre) CONTAINS toLower($termino)
-            WITH ligas, equipos, collect(j {.*, elementId: toString(elementId(j)), id_jugador: ID(j)}) AS jugadores
+        // 3. BÚSQUEDA DE JUGADORES
+        const jugadoresQuery = `
+            SELECT 
+                j.id,
+                j.nombre,
+                j.posicion,
+                j.edad,
+                j.nacionalidad,
+                e.nombre as equipo_nombre,
+                j.id::text AS "elementId"
+            FROM jugadores j
+            LEFT JOIN equipos e ON j.equipo_id = e.id
+            WHERE LOWER(j.nombre) LIKE $1 OR LOWER(j.posicion) LIKE $1
+            ORDER BY j.nombre
+            LIMIT 10;
+        `;
+        const jugadoresResult = await pool.query(jugadoresQuery, [`%${terminoBusqueda}%`]);
+        const jugadores = jugadoresResult.rows.map(jugador => ({
+            ...jugador,
+            id_jugador: jugador.id,
+            foto: null
+        }));
 
-            OPTIONAL MATCH (u:Usuario)
-            WHERE toLower(u.username) CONTAINS toLower($termino)
-            RETURN ligas, equipos, jugadores
-            `,
-            { termino: terminoBusqueda }
-        );
-
-        const records = result.records[0]?.toObject() || {};
-        neo4jResults = {
-            ligas: records.ligas || [],
-            equipos: records.equipos || [],
-            jugadores: records.jugadores || [],
-        };
-       
-    } catch (error) {
-        console.error("❌ Error en búsqueda Neo4j:", error);
-    } finally {
-        await neo4jSession.close();
-    }
-
-    // 2. BÚSQUEDA EN POSTGRESQL (Usuarios)
-    let postgresUsers = [];
-    try {
-        // Busca coincidencias en: nombre, apellido, nombre_usuario o email
-        const userQuery = `
+        // 4. BÚSQUEDA DE USUARIOS
+        const usuariosQuery = `
             SELECT
                 id_usuario,
                 nombre,
                 apellido,
                 nombre_usuario,
                 foto_perfil,
-                -- Agregamos un 'elementId' temporal para que coincida con el frontend de React Native
-                id_usuario AS "elementId"
+                id_usuario::text AS "elementId"
             FROM usuarios
             WHERE
                 LOWER(nombre) LIKE $1 OR
@@ -1129,41 +1149,24 @@ app.get("/buscar", async (req, res) => {
                 LOWER(email) LIKE $1
             LIMIT 10;
         `;
-       
-        const searchPattern = `%${terminoBusqueda}%`;
-        const result = await pool.query(userQuery, [searchPattern]);
-
-        // Mapear los resultados de Postgres
-        postgresUsers = result.rows.map(user => {
+        const usuariosResult = await pool.query(usuariosQuery, [`%${terminoBusqueda}%`]);
+        const usuarios = usuariosResult.rows.map(user => {
             let fotoUrl = user.foto_perfil;
             if (fotoUrl && !fotoUrl.startsWith('http')) {
-                // Reconstruimos la URL de la imagen
                 fotoUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(fotoUrl)}`;
             }
-
             return {
-                id_usuario: user.id_usuario,
-                nombre: user.nombre,
-                apellido: user.apellido,
-                nombre_usuario: user.nombre_usuario,
-                foto_perfil: fotoUrl || null,
-                // Convertir la ID de usuario a string para keyExtractor (Como lo hacemos en Neo4j)
-                elementId: user.elementId.toString()
+                ...user,
+                foto_perfil: fotoUrl || null
             };
         });
 
-    } catch (error) {
-        console.error("❌ Error en búsqueda PostgreSQL (usuarios):", error);
-    }
+        res.json({ ligas, equipos, jugadores, usuarios });
 
-    // 3. COMBINAR Y ENVIAR
-    // Enviamos todos los resultados combinados en el formato que el frontend espera
-    res.json({
-        ligas: neo4jResults.ligas,
-        equipos: neo4jResults.equipos,
-        jugadores: neo4jResults.jugadores,
-        usuarios: postgresUsers,
-    });
+    } catch (error) {
+        console.error("❌ Error en búsqueda PostgreSQL:", error);
+        res.status(500).json({ error: "Error en el servidor al realizar búsqueda" });
+    }
 });
 
 // ------------------ OBTENER LISTAS DE SEGUIMIENTO (SEGUIDORES/SEGUIDOS) ------------------
@@ -1390,119 +1393,237 @@ app.get("/profile/:userId/followStats", async (req, res) => {
     }
 });
 
-// ------------------ ENDPOINTS DE DETALLE (Neo4j) ------------------
-
-// 1. OBTENER DETALLE DE LIGA Y SUS EQUIPOS (Neo4j)
+// ------------------ DETALLE DE LIGA ------------------
 app.get("/liga/:ligaId", async (req, res) => {
-    const {ligaId} = req.params;
-    const session = driver.session();
+    const { ligaId } = req.params;
    
-    try {
-        // Consultar la liga y sus equipos relacionados
-        const cypher = `
-            MATCH (l:Liga)
-            WHERE ID(l) = toInteger($id)
-            // Relación: (Equipo)-[:PERTENECE_A]->(Liga)
-            OPTIONAL MATCH (e:Equipo)-[:PERTENECE_A]->(l)
-            RETURN l, collect(e {.*, id_equipo: ID(e)}) AS equipos
-        `;
-       
-        const result = await session.run(cypher, {id: ligaId});
+    if (!ligaId || isNaN(ligaId)) {
+        return res.status(400).json({ error: "ID de liga inválido" });
+    }
 
-        if (result.records.length === 0) {
-            return res.status(404).json({error: "Liga no encontrada."});
+    try {
+        const ligaQuery = `
+            SELECT 
+                id,
+                nombre,
+                pais,
+                nivel,
+                created_at
+            FROM ligas
+            WHERE id = $1
+        `;
+        const ligaResult = await pool.query(ligaQuery, [ligaId]);
+
+        if (ligaResult.rows.length === 0) {
+            return res.status(404).json({ error: "Liga no encontrada" });
         }
 
-        const record = result.records[0];
-        const ligaNode = record.get('l').properties;
-        const equipos = record.get('equipos');
+        const liga = ligaResult.rows[0];
 
-        const liga = {
-            ...ligaNode,
-            id_liga: record.get('l').identity.low, // Usamos ID nativo de Neo4j
-            equipos: equipos.map(e => e.properties || e),
-        };
+        const equiposQuery = `
+            SELECT 
+                id,
+                nombre,
+                ciudad,
+                estadio,
+                liga_id
+            FROM equipos
+            WHERE liga_id = $1
+            ORDER BY nombre
+        `;
+        const equiposResult = await pool.query(equiposQuery, [ligaId]);
 
-        res.json(liga);
+        const equipos = equiposResult.rows.map(equipo => ({
+            ...equipo,
+            id_equipo: equipo.id
+        }));
+
+        res.json({
+            ...liga,
+            id_liga: liga.id,
+            equipos: equipos
+        });
+
     } catch (error) {
-        console.error("❌ Error en /liga/:ligaId (Neo4j):", error);
-        res.status(500).json({error: "Error interno del servidor al consultar Neo4j"});
-    } finally {
-        await session.close();
+        console.error("❌ Error en /liga/:ligaId:", error);
+        res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// 2. OBTENER DETALLE DE EQUIPO Y SUS JUGADORES (Neo4j)
+// ------------------ DETALLE DE EQUIPO ------------------
 app.get("/equipo/:equipoId", async (req, res) => {
-    const {equipoId} = req.params;
-    const session = driver.session();
+    const { equipoId } = req.params;
    
-    try {
-        // Consultar el equipo y sus jugadores relacionados
-        const cypher = `
-            MATCH (e:Equipo)
-            WHERE ID(e) = toInteger($id)
-            // Relación: (Jugador)-[:PERTENECE_A]->(Equipo)
-            OPTIONAL MATCH (j:Jugador)-[:PERTENECE_A]->(e)
-            RETURN e, collect(j {.*, id_jugador: ID(j)}) AS jugadores
-        `;
-       
-        const result = await session.run(cypher, {id: equipoId});
+    if (!equipoId || isNaN(equipoId)) {
+        return res.status(400).json({ error: "ID de equipo inválido" });
+    }
 
-        if (result.records.length === 0) {
-            return res.status(404).json({error: "Equipo no encontrado."});
+    try {
+        const equipoQuery = `
+            SELECT 
+                e.id,
+                e.nombre,
+                e.ciudad,
+                e.estadio,
+                e.liga_id,
+                l.nombre as liga_nombre,
+                l.pais as liga_pais
+            FROM equipos e
+            LEFT JOIN ligas l ON e.liga_id = l.id
+            WHERE e.id = $1
+        `;
+        const equipoResult = await pool.query(equipoQuery, [equipoId]);
+
+        if (equipoResult.rows.length === 0) {
+            return res.status(404).json({ error: "Equipo no encontrado" });
         }
 
-        const record = result.records[0];
-        const equipoNode = record.get('e').properties;
-        const jugadores = record.get('jugadores');
+        const equipo = equipoResult.rows[0];
 
-        const equipo = {
-            ...equipoNode,
-            id_equipo: record.get('e').identity.low,
-            jugadores: jugadores.map(j => j.properties || j),
-        };
+        const jugadoresQuery = `
+            SELECT 
+                id,
+                nombre,
+                posicion,
+                edad,
+                nacionalidad,
+                partidos_jugados,
+                goles,
+                asistencias,
+                tarjetas_amarillas,
+                tarjetas_rojas
+            FROM jugadores
+            WHERE equipo_id = $1
+            ORDER BY 
+                CASE posicion
+                    WHEN 'Portero' THEN 1
+                    WHEN 'Defensa' THEN 2
+                    WHEN 'Centrocampista' THEN 3
+                    WHEN 'Delantero' THEN 4
+                    ELSE 5
+                END,
+                nombre
+        `;
+        const jugadoresResult = await pool.query(jugadoresQuery, [equipoId]);
 
-        res.json(equipo);
+        const jugadores = jugadoresResult.rows.map(jugador => ({
+            ...jugador,
+            id_jugador: jugador.id,
+            foto: null
+        }));
+
+        res.json({
+            ...equipo,
+            id_equipo: equipo.id,
+            jugadores: jugadores
+        });
+
     } catch (error) {
-        console.error("❌ Error en /equipo/:equipoId (Neo4j):", error);
-        res.status(500).json({error: "Error interno del servidor al consultar Neo4j"});
-    } finally {
-        await session.close();
+        console.error("❌ Error en /equipo/:equipoId:", error);
+        res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// 3. OBTENER DETALLE DE JUGADOR (Neo4j)
+// ------------------ DETALLE DE JUGADOR ------------------
 app.get("/jugador/:jugadorId", async (req, res) => {
-    const {jugadorId} = req.params;
-    const session = driver.session();
+    const { jugadorId } = req.params;
+   
+    if (!jugadorId || isNaN(jugadorId)) {
+        return res.status(400).json({ error: "ID de jugador inválido" });
+    }
 
     try {
-        // Consultar solo el nodo del jugador
-        const cypher = `
-            MATCH (j:Jugador)
-            WHERE ID(j) = toInteger($id)
-            RETURN j
+        const jugadorQuery = `
+            SELECT 
+                j.id,
+                j.nombre,
+                j.posicion,
+                j.edad,
+                j.nacionalidad,
+                j.equipo_id,
+                e.nombre as equipo_nombre,
+                e.ciudad as equipo_ciudad,
+                l.nombre as liga_nombre,
+                j.partidos_jugados,
+                j.minutos_jugados,
+                j.titularidades,
+                j.suplente,
+                j.goles,
+                j.goles_penalti,
+                j.asistencias,
+                j.tarjetas_amarillas,
+                j.tarjetas_rojas,
+                j.tiros_totales,
+                j.tiros_a_puerta,
+                j.pases_totales,
+                j.pases_completados,
+                j.pases_clave,
+                j.regates_intentados,
+                j.regates_exitosos,
+                j.duelos_ganados,
+                j.duelos_aereos_ganados,
+                j.entradas,
+                j.intercepciones,
+                j.despejes,
+                j.paradas,
+                j.goles_encajados,
+                j.porterias_imbatidas,
+                j.temporada
+            FROM jugadores j
+            LEFT JOIN equipos e ON j.equipo_id = e.id
+            LEFT JOIN ligas l ON j.liga_id = l.id
+            WHERE j.id = $1
         `;
-       
-        const result = await session.run(cypher, {id: jugadorId});
+        const jugadorResult = await pool.query(jugadorQuery, [jugadorId]);
 
-        if (result.records.length === 0) {
-            return res.status(404).json({error: "Jugador no encontrado."});
+        if (jugadorResult.rows.length === 0) {
+            return res.status(404).json({ error: "Jugador no encontrado" });
         }
 
-        const jugadorNode = result.records[0].get('j').properties;
-        const jugador = {
-            ...jugadorNode,
-            id_jugador: result.records[0].get('j').identity.low,
-        };
+        const jugador = jugadorResult.rows[0];
 
-        res.json(jugador);
+        res.json({
+            ...jugador,
+            id_jugador: jugador.id,
+            foto: null,
+            numero: null
+        });
+
     } catch (error) {
-        console.error("❌ Error en /jugador/:jugadorId (Neo4j):", error);
-        res.status(500).json({error: "Error interno del servidor al consultar Neo4j"});
-    } finally {
-        await session.close();
+        console.error("❌ Error en /jugador/:jugadorId:", error);
+        res.status(500).json({ error: "Error interno del servidor" });
+    }
+});
+
+// ------------------ ESTADÍSTICAS DE LIGA ------------------
+app.get("/liga/:ligaId/stats", async (req, res) => {
+    const { ligaId } = req.params;
+   
+    try {
+        const statsQuery = `
+            SELECT 
+                COUNT(DISTINCT e.id) as total_equipos,
+                COUNT(DISTINCT j.id) as total_jugadores,
+                SUM(j.goles) as total_goles,
+                SUM(j.partidos_jugados) as total_partidos
+            FROM ligas l
+            LEFT JOIN equipos e ON e.liga_id = l.id
+            LEFT JOIN jugadores j ON j.liga_id = l.id
+            WHERE l.id = $1
+            GROUP BY l.id
+        `;
+        const statsResult = await pool.query(statsQuery, [ligaId]);
+        
+        res.json(statsResult.rows[0] || {
+            total_equipos: 0,
+            total_jugadores: 0,
+            total_goles: 0,
+            total_partidos: 0
+        });
+
+    } catch (error) {
+        console.error("❌ Error en /liga/:ligaId/stats:", error);
+        res.status(500).json({ error: "Error al obtener estadísticas" });
     }
 });
 
