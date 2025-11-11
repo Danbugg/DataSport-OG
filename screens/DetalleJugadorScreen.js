@@ -5,13 +5,15 @@ import {
     StyleSheet,
     ActivityIndicator,
     ScrollView,
+    StatusBar,
+    Platform
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const API_BASE_URL = "http://localhost:3000";
 
 export default function DetalleJugadorScreen({ route }) {
     const { itemId } = route.params;
-
     const [jugador, setJugador] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -23,12 +25,11 @@ export default function DetalleJugadorScreen({ route }) {
         try {
             const response = await fetch(`${API_BASE_URL}/jugador/${itemId}`);
             const data = await response.json();
-            
+
             if (data.error) {
                 console.error("Error al cargar jugador:", data.error);
                 return;
             }
-
             setJugador(data);
         } catch (error) {
             console.error("Error al cargar detalle de jugador:", error);
@@ -39,262 +40,320 @@ export default function DetalleJugadorScreen({ route }) {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#00aaff" />
-                <Text style={styles.loadingText}>Cargando jugador...</Text>
-            </View>
+            <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+                <StatusBar barStyle="light-content" backgroundColor="#000" />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#00aaff" />
+                    <Text style={styles.loadingText}>Cargando jugador...</Text>
+                </View>
+            </SafeAreaView>
         );
     }
 
     if (!jugador) {
         return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>No se pudo cargar la información del jugador</Text>
-            </View>
+            <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+                <StatusBar barStyle="light-content" backgroundColor="#000" />
+                <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>
+                        No se pudo cargar la información del jugador
+                    </Text>
+                </View>
+            </SafeAreaView>
         );
     }
 
-    // Función para obtener emoji de posición
     const getPosicionEmoji = (posicion) => {
-        switch(posicion) {
-            case 'Portero': return '🧤';
-            case 'Defensa': return '🛡️';
-            case 'Centrocampista': return '⚙️';
-            case 'Delantero': return '⚡';
-            default: return '⚽';
+        switch (posicion) {
+            case "Portero":
+                return "🧤";
+            case "Defensa":
+                return "🛡️";
+            case "Centrocampista":
+                return "⚙️";
+            case "Delantero":
+                return "⚡";
+            default:
+                return "⚽";
         }
     };
 
     return (
-        <ScrollView style={styles.container}>
-            {/* Header del Jugador */}
-            <View style={styles.header}>
-                <View style={styles.fotoPlaceholder}>
-                    <Text style={styles.fotoText}>👤</Text>
-                </View>
-                <Text style={styles.nombreJugador}>{jugador.nombre}</Text>
-                
-                {jugador.posicion && (
-                    <View style={styles.posicionBadge}>
-                        <Text style={styles.posicionText}>
-                            {getPosicionEmoji(jugador.posicion)} {jugador.posicion}
+        <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+            <StatusBar barStyle="light-content" backgroundColor="#000" />
+            <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+                <View style={styles.header}>
+                    <View style={styles.fotoPlaceholder}>
+                        <Text style={styles.fotoText}>👤</Text>
+                    </View>
+                    <Text style={styles.nombreJugador}>{jugador.nombre}</Text>
+
+                    {jugador.posicion && (
+                        <View style={styles.posicionBadge}>
+                            <Text style={styles.posicionText}>
+                                {getPosicionEmoji(jugador.posicion)} {jugador.posicion}
+                            </Text>
+                        </View>
+                    )}
+
+                    {jugador.equipo_nombre && (
+                        <Text style={styles.equipoNombre}>
+                            ⚽ {jugador.equipo_nombre}
                         </Text>
-                    </View>
-                )}
+                    )}
+                </View>
 
-                {jugador.equipo_nombre && (
-                    <Text style={styles.equipoNombre}>
-                        ⚽ {jugador.equipo_nombre}
-                    </Text>
-                )}
-            </View>
-
-            {/* Información Personal */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📋 Información Personal</Text>
-
-                {jugador.edad && (
-                    <View style={styles.infoCard}>
-                        <Text style={styles.infoLabel}>Edad</Text>
-                        <Text style={styles.infoValue}>{jugador.edad} años</Text>
-                    </View>
-                )}
-
-                {jugador.nacionalidad && (
-                    <View style={styles.infoCard}>
-                        <Text style={styles.infoLabel}>Nacionalidad</Text>
-                        <Text style={styles.infoValue}>🌍 {jugador.nacionalidad}</Text>
-                    </View>
-                )}
-
-                {jugador.liga_nombre && (
-                    <View style={styles.infoCard}>
-                        <Text style={styles.infoLabel}>Liga</Text>
-                        <Text style={styles.infoValue}>{jugador.liga_nombre}</Text>
-                    </View>
-                )}
-
-                {jugador.temporada && (
-                    <View style={styles.infoCard}>
-                        <Text style={styles.infoLabel}>Temporada</Text>
-                        <Text style={styles.infoValue}>{jugador.temporada}</Text>
-                    </View>
-                )}
-            </View>
-
-            {/* Estadísticas Principales */}
-            {(jugador.partidos_jugados > 0 || jugador.goles > 0 || jugador.asistencias > 0) && (
+                {/* Información personal */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>📊 Estadísticas Principales</Text>
+                    <Text style={styles.sectionTitle}>📋 Información Personal</Text>
 
-                    <View style={styles.statsContainer}>
-                        <View style={styles.statBox}>
-                            <Text style={styles.statValue}>{jugador.partidos_jugados || 0}</Text>
-                            <Text style={styles.statLabel}>Partidos</Text>
+                    {jugador.edad && (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Edad</Text>
+                            <Text style={styles.infoValue}>{jugador.edad} años</Text>
                         </View>
+                    )}
 
-                        <View style={styles.statBox}>
-                            <Text style={styles.statValue}>{jugador.goles || 0}</Text>
-                            <Text style={styles.statLabel}>⚽ Goles</Text>
+                    {jugador.nacionalidad && (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Nacionalidad</Text>
+                            <Text style={styles.infoValue}>🌍 {jugador.nacionalidad}</Text>
                         </View>
+                    )}
 
-                        <View style={styles.statBox}>
-                            <Text style={styles.statValue}>{jugador.asistencias || 0}</Text>
-                            <Text style={styles.statLabel}>🎯 Asistencias</Text>
+                    {jugador.liga_nombre && (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Liga</Text>
+                            <Text style={styles.infoValue}>{jugador.liga_nombre}</Text>
                         </View>
-                    </View>
+                    )}
 
-                    {/* Estadísticas secundarias */}
-                    {jugador.minutos_jugados > 0 && (
-                        <View style={styles.statsGrid}>
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Minutos</Text>
-                                <Text style={styles.miniStatValue}>{jugador.minutos_jugados}'</Text>
-                            </View>
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Titular</Text>
-                                <Text style={styles.miniStatValue}>{jugador.titularidades || 0}</Text>
-                            </View>
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Suplente</Text>
-                                <Text style={styles.miniStatValue}>{jugador.suplente || 0}</Text>
-                            </View>
+                    {jugador.temporada && (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Temporada</Text>
+                            <Text style={styles.infoValue}>{jugador.temporada}</Text>
                         </View>
                     )}
                 </View>
-            )}
 
-            {/* Disciplina */}
-            {(jugador.tarjetas_amarillas > 0 || jugador.tarjetas_rojas > 0) && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>⚠️ Disciplina</Text>
-                    <View style={styles.statsGrid}>
-                        <View style={styles.cardStat}>
-                            <View style={styles.yellowCard} />
-                            <Text style={styles.cardNumber}>{jugador.tarjetas_amarillas || 0}</Text>
-                            <Text style={styles.cardLabel}>Amarillas</Text>
+                {/* Estadísticas principales */}
+                {(jugador.partidos_jugados > 0 ||
+                    jugador.goles > 0 ||
+                    jugador.asistencias > 0) && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>📊 Estadísticas Principales</Text>
+
+                        <View style={styles.statsContainer}>
+                            <View style={styles.statBox}>
+                                <Text style={styles.statValue}>
+                                    {jugador.partidos_jugados || 0}
+                                </Text>
+                                <Text style={styles.statLabel}>Partidos</Text>
+                            </View>
+
+                            <View style={styles.statBox}>
+                                <Text style={styles.statValue}>
+                                    {jugador.goles || 0}
+                                </Text>
+                                <Text style={styles.statLabel}>⚽ Goles</Text>
+                            </View>
+
+                            <View style={styles.statBox}>
+                                <Text style={styles.statValue}>
+                                    {jugador.asistencias || 0}
+                                </Text>
+                                <Text style={styles.statLabel}>🎯 Asistencias</Text>
+                            </View>
                         </View>
-                        <View style={styles.cardStat}>
-                            <View style={styles.redCard} />
-                            <Text style={styles.cardNumber}>{jugador.tarjetas_rojas || 0}</Text>
-                            <Text style={styles.cardLabel}>Rojas</Text>
+
+                        {jugador.minutos_jugados > 0 && (
+                            <View style={styles.statsGrid}>
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Minutos</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.minutos_jugados}'
+                                    </Text>
+                                </View>
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Titular</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.titularidades || 0}
+                                    </Text>
+                                </View>
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Suplente</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.suplente || 0}
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+                {/* Disciplina */}
+                {(jugador.tarjetas_amarillas > 0 ||
+                    jugador.tarjetas_rojas > 0) && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>⚠️ Disciplina</Text>
+                        <View style={styles.statsGrid}>
+                            <View style={styles.cardStat}>
+                                <View style={styles.yellowCard} />
+                                <Text style={styles.cardNumber}>
+                                    {jugador.tarjetas_amarillas || 0}
+                                </Text>
+                                <Text style={styles.cardLabel}>Amarillas</Text>
+                            </View>
+                            <View style={styles.cardStat}>
+                                <View style={styles.redCard} />
+                                <Text style={styles.cardNumber}>
+                                    {jugador.tarjetas_rojas || 0}
+                                </Text>
+                                <Text style={styles.cardLabel}>Rojas</Text>
+                            </View>
                         </View>
                     </View>
-                </View>
-            )}
+                )}
 
-            {/* Estadísticas de Ataque */}
-            {(jugador.tiros_totales > 0 || jugador.goles_penalti > 0) && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>⚡ Ataque</Text>
-                    <View style={styles.statsGrid}>
-                        {jugador.tiros_totales > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Tiros Totales</Text>
-                                <Text style={styles.miniStatValue}>{jugador.tiros_totales}</Text>
-                            </View>
-                        )}
-                        {jugador.tiros_a_puerta > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>A Puerta</Text>
-                                <Text style={styles.miniStatValue}>{jugador.tiros_a_puerta}</Text>
-                            </View>
-                        )}
-                        {jugador.goles_penalti > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Goles Penalti</Text>
-                                <Text style={styles.miniStatValue}>{jugador.goles_penalti}</Text>
-                            </View>
-                        )}
+                {/* Ataque */}
+                {(jugador.tiros_totales > 0 || jugador.goles_penalti > 0) && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>⚡ Ataque</Text>
+                        <View style={styles.statsGrid}>
+                            {jugador.tiros_totales > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Tiros Totales</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.tiros_totales}
+                                    </Text>
+                                </View>
+                            )}
+                            {jugador.tiros_a_puerta > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>A Puerta</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.tiros_a_puerta}
+                                    </Text>
+                                </View>
+                            )}
+                            {jugador.goles_penalti > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Goles Penalti</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.goles_penalti}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
-                </View>
-            )}
+                )}
 
-            {/* Estadísticas de Pase */}
-            {(jugador.pases_totales > 0 || jugador.pases_clave > 0) && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>🎯 Pases</Text>
-                    <View style={styles.statsGrid}>
-                        {jugador.pases_totales > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Totales</Text>
-                                <Text style={styles.miniStatValue}>{jugador.pases_totales}</Text>
-                            </View>
-                        )}
-                        {jugador.pases_completados > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Completados</Text>
-                                <Text style={styles.miniStatValue}>{jugador.pases_completados}</Text>
-                            </View>
-                        )}
-                        {jugador.pases_clave > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Pases Clave</Text>
-                                <Text style={styles.miniStatValue}>{jugador.pases_clave}</Text>
-                            </View>
-                        )}
+                {/* Pases */}
+                {(jugador.pases_totales > 0 || jugador.pases_clave > 0) && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>🎯 Pases</Text>
+                        <View style={styles.statsGrid}>
+                            {jugador.pases_totales > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Totales</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.pases_totales}
+                                    </Text>
+                                </View>
+                            )}
+                            {jugador.pases_completados > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Completados</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.pases_completados}
+                                    </Text>
+                                </View>
+                            )}
+                            {jugador.pases_clave > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Pases Clave</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.pases_clave}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
-                </View>
-            )}
+                )}
 
-            {/* Estadísticas de Portero */}
-            {jugador.posicion === 'Portero' && (jugador.paradas > 0 || jugador.porterias_imbatidas > 0) && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>🧤 Estadísticas de Portero</Text>
-                    <View style={styles.statsGrid}>
-                        {jugador.paradas > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Paradas</Text>
-                                <Text style={styles.miniStatValue}>{jugador.paradas}</Text>
+                {/* Portero */}
+                {jugador.posicion === "Portero" &&
+                    (jugador.paradas > 0 || jugador.porterias_imbatidas > 0) && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionTitle}>🧤 Estadísticas de Portero</Text>
+                            <View style={styles.statsGrid}>
+                                {jugador.paradas > 0 && (
+                                    <View style={styles.miniStatCard}>
+                                        <Text style={styles.miniStatLabel}>Paradas</Text>
+                                        <Text style={styles.miniStatValue}>{jugador.paradas}</Text>
+                                    </View>
+                                )}
+                                {jugador.goles_encajados >= 0 && (
+                                    <View style={styles.miniStatCard}>
+                                        <Text style={styles.miniStatLabel}>Goles Encajados</Text>
+                                        <Text style={styles.miniStatValue}>
+                                            {jugador.goles_encajados}
+                                        </Text>
+                                    </View>
+                                )}
+                                {jugador.porterias_imbatidas > 0 && (
+                                    <View style={styles.miniStatCard}>
+                                        <Text style={styles.miniStatLabel}>Vallas Invictas</Text>
+                                        <Text style={styles.miniStatValue}>
+                                            {jugador.porterias_imbatidas}
+                                        </Text>
+                                    </View>
+                                )}
                             </View>
-                        )}
-                        {jugador.goles_encajados >= 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Goles Encajados</Text>
-                                <Text style={styles.miniStatValue}>{jugador.goles_encajados}</Text>
-                            </View>
-                        )}
-                        {jugador.porterias_imbatidas > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Vallas Invictas</Text>
-                                <Text style={styles.miniStatValue}>{jugador.porterias_imbatidas}</Text>
-                            </View>
-                        )}
-                    </View>
-                </View>
-            )}
+                        </View>
+                    )}
 
-            {/* Estadísticas Defensivas */}
-            {(jugador.entradas > 0 || jugador.intercepciones > 0 || jugador.despejes > 0) && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>🛡️ Defensa</Text>
-                    <View style={styles.statsGrid}>
-                        {jugador.entradas > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Entradas</Text>
-                                <Text style={styles.miniStatValue}>{jugador.entradas}</Text>
-                            </View>
-                        )}
-                        {jugador.intercepciones > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Intercepciones</Text>
-                                <Text style={styles.miniStatValue}>{jugador.intercepciones}</Text>
-                            </View>
-                        )}
-                        {jugador.despejes > 0 && (
-                            <View style={styles.miniStatCard}>
-                                <Text style={styles.miniStatLabel}>Despejes</Text>
-                                <Text style={styles.miniStatValue}>{jugador.despejes}</Text>
-                            </View>
-                        )}
+                {/* Defensa */}
+                {(jugador.entradas > 0 ||
+                    jugador.intercepciones > 0 ||
+                    jugador.despejes > 0) && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>🛡️ Defensa</Text>
+                        <View style={styles.statsGrid}>
+                            {jugador.entradas > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Entradas</Text>
+                                    <Text style={styles.miniStatValue}>{jugador.entradas}</Text>
+                                </View>
+                            )}
+                            {jugador.intercepciones > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Intercepciones</Text>
+                                    <Text style={styles.miniStatValue}>
+                                        {jugador.intercepciones}
+                                    </Text>
+                                </View>
+                            )}
+                            {jugador.despejes > 0 && (
+                                <View style={styles.miniStatCard}>
+                                    <Text style={styles.miniStatLabel}>Despejes</Text>
+                                    <Text style={styles.miniStatValue}>{jugador.despejes}</Text>
+                                </View>
+                            )}
+                        </View>
                     </View>
-                </View>
-            )}
-        </ScrollView>
+                )}
+            </ScrollView>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: "#000",
+        paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
+    },
     container: {
         flex: 1,
         backgroundColor: "#000",

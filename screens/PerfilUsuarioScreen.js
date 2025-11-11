@@ -18,14 +18,10 @@ import { useFocusEffect, useRoute, useNavigation } from "@react-navigation/nativ
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// Usaremos la URL de IP local (AJUSTA ESTO SI USAS EMULADOR/DISPOSITIVO REAL)
 const API_BASE_URL = "http://localhost:3000"; 
 
 const { width } = Dimensions.get('window');
 
-// -----------------------------------------------------------------
-// FUNCIÓN AUXILIAR PARA EL FORMATO DE FECHA
-// -----------------------------------------------------------------
 const formatPostDate = (dateString) => {
     const postDate = new Date(dateString);
     const now = new Date();
@@ -53,81 +49,6 @@ const formatPostDate = (dateString) => {
     }
 };
 
-// --- ESTILOS DE LA TARJETA DE PUBLICACIÓN (POSTCARD) ---
-const postStyles = StyleSheet.create({
-    postCard: {
-        backgroundColor: '#000000', 
-        borderRadius: 0,
-        padding: 15,
-        marginBottom: 25, 
-        width: '100%',
-        shadowColor: 'transparent',
-        shadowOpacity: 0, 
-        elevation: 0,
-    },
-    postHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between', 
-        marginBottom: 10,
-    },
-    authorInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    authorImage: {
-        width: 45,
-        height: 45,
-        borderRadius: 22.5,
-        marginRight: 10,
-        borderWidth: 2,
-        borderColor: '#00aaff',
-    },
-    authorUsername: {
-        color: '#00aaff',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    postContent: {
-        color: '#eee',
-        fontSize: 16,
-        lineHeight: 22,
-        marginBottom: 10,
-    },
-    postImage: {
-        width: '100%',
-        height: 250, 
-        borderRadius: 8,
-        marginBottom: 10,
-        resizeMode: 'cover',
-    },
-    postDate: {
-        color: '#888',
-        fontSize: 12,
-    },
-    postActions: { 
-        flexDirection: 'row',
-        paddingVertical: 8,
-        borderTopWidth: 0, 
-        borderTopColor: 'transparent',
-        marginBottom: 5,
-    },
-    actionButton: { 
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginRight: 20,
-        padding: 5,
-    },
-    actionText: { 
-        color: '#eee',
-        fontSize: 14,
-        marginLeft: 5,
-        fontWeight: '600',
-    },
-});
-
-
-// --- Componente de Tarjeta de Publicación (PostCard - Perfil de Otros) ---
 const PostCard = ({ post, navigation, onLikeToggle }) => {
     const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
     const [likeCount, setLikeCount] = useState(post.likeCount || 0);
@@ -141,9 +62,12 @@ const PostCard = ({ post, navigation, onLikeToggle }) => {
     const handleLike = async () => {
         const newIsLiked = !isLiked;
         const newLikeCount = newIsLiked ? likeCount + 1 : likeCount - 1;
+        
         setIsLiked(newIsLiked);
         setLikeCount(newLikeCount);
+        
         const success = await onLikeToggle(post.id, newIsLiked);
+        
         if (!success) {
             setIsLiked(!newIsLiked);
             setLikeCount(newIsLiked ? likeCount - 1 : likeCount + 1);
@@ -171,7 +95,6 @@ const PostCard = ({ post, navigation, onLikeToggle }) => {
             
             <Text style={postStyles.postContent}>{post.content}</Text>
             
-            {/* CÓDIGO AÑADIDO: Image envuelta en TouchableOpacity para el visor */}
             {post.imageUrl && (
                 <TouchableOpacity onPress={navigateToImgCompleta}>
                     <Image 
@@ -205,8 +128,6 @@ const PostCard = ({ post, navigation, onLikeToggle }) => {
     );
 };
 
-
-// --- Componente PRINCIPAL PerfilUsuarioScreen ---
 export default function PerfilUsuarioScreen() {
     const route = useRoute();
     const navigation = useNavigation();
@@ -214,14 +135,12 @@ export default function PerfilUsuarioScreen() {
     const viewingUserId = route.params?.itemId; 
     const [userProfile, setUserProfile] = useState(null);
     const [userPosts, setUserPosts] = useState([]);
-    // ✅ Nuevo estado para las métricas
     const [followMetrics, setFollowMetrics] = useState({ followersCount: 0, followingCount: 0 }); 
     const [currentLoggedInId, setCurrentLoggedInId] = useState(null); 
     const [loading, setLoading] = useState(true);
-    const [isFollowing, setIsFollowing] = useState(false); 
+    const [isFollowing, setIsFollowing] = useState(false);
     const fondoLogin = require("../assets/fondoLogin.jpg"); 
 
-    // ✅ FUNCIÓN DE NAVEGACIÓN A SEGUIDORES
     const navigateToFollowers = () => {
         if (!userProfile) return;
         navigation.navigate('SeguidoresScreen', { 
@@ -230,7 +149,6 @@ export default function PerfilUsuarioScreen() {
         });
     };
 
-    // ✅ FUNCIÓN DE NAVEGACIÓN A SEGUIDOS
     const navigateToFollowing = () => {
         if (!userProfile) return;
         navigation.navigate('SeguidosScreen', { 
@@ -265,7 +183,6 @@ export default function PerfilUsuarioScreen() {
         }
     }, [currentLoggedInId]);
 
-
     const fetchUserPosts = async (id, loggedInId) => {
         try {
             const response = await fetch(`${API_BASE_URL}/profile/${id}/posts?currentUserId=${loggedInId}`);
@@ -275,7 +192,6 @@ export default function PerfilUsuarioScreen() {
                 setUserPosts(data.posts || []); 
             } else {
                 console.error(`[POSTS DEBUG] Error HTTP al cargar posts: ${response.status}`);
-                console.log("No se pudieron cargar las publicaciones del usuario.");
                 setUserPosts([]);
             }
         } catch (error) {
@@ -283,7 +199,6 @@ export default function PerfilUsuarioScreen() {
             setUserPosts([]);
         }
     };
-
 
     const handleFollowToggle = async () => {
         if (!currentLoggedInId) {
@@ -294,13 +209,16 @@ export default function PerfilUsuarioScreen() {
         const followedId = viewingUserId; 
         const followerId = currentLoggedInId;
 
+        if (String(followedId) === String(followerId)) {
+             Alert.alert("Error", "No puedes seguirte a ti mismo.");
+             return;
+        }
+
         const endpoint = isFollowing ? `unfollow/${followedId}` : `follow/${followedId}`;
         const method = isFollowing ? 'DELETE' : 'POST';
         
-        // Optimistic UI update
         setIsFollowing(!isFollowing);
 
-        // Actualizar métricas antes de la llamada (optimista)
         setFollowMetrics(prev => ({
             ...prev,
             followersCount: prev.followersCount + (isFollowing ? -1 : 1)
@@ -314,7 +232,6 @@ export default function PerfilUsuarioScreen() {
             });
 
             if (!response.ok) {
-                // Revertir en caso de fallo
                 setIsFollowing(prev => !prev); 
                 setFollowMetrics(prev => ({
                     ...prev,
@@ -326,7 +243,6 @@ export default function PerfilUsuarioScreen() {
 
         } catch (error) {
             console.error("Error de red en follow/unfollow:", error);
-            // Revertir en caso de fallo de red
             setIsFollowing(prev => !prev); 
             setFollowMetrics(prev => ({
                 ...prev,
@@ -335,7 +251,6 @@ export default function PerfilUsuarioScreen() {
             Alert.alert("Error de Conexión", "No se pudo conectar al servidor para realizar la acción de seguimiento.");
         }
     };
-
 
     const fetchProfile = async () => {
         setLoading(true);
@@ -361,17 +276,20 @@ export default function PerfilUsuarioScreen() {
             }
 
             const data = await profileResponse.json();
-            const profileData = { ...data.user, id_usuario: String(data.user.id_usuario), descripcion: data.user.descripcion || '' };
+            const profileData = { 
+                ...data.user, 
+                id_usuario: String(data.user.id_usuario), 
+                descripcion: data.user.descripcion || '' 
+            };
             setUserProfile(profileData);
             success = true;
 
-            // ✅ Se obtienen las métricas de seguimiento de la API
             setFollowMetrics({
                 followersCount: data.followersCount || 0,
                 followingCount: data.followingCount || 0,
             });
 
-            if (loggedId) { 
+            if (loggedId && String(viewingUserId) !== String(loggedId)) { 
                 const followUrl = `${API_BASE_URL}/isFollowing/${viewingUserId}?followerId=${loggedId}`; 
                 
                 const followResponse = await fetch(followUrl);
@@ -402,13 +320,11 @@ export default function PerfilUsuarioScreen() {
     useFocusEffect(
         useCallback(() => {
             fetchProfile();
-        }, [viewingUserId]) 
+        }, [viewingUserId])
     );
     
     const isOwnProfile = String(viewingUserId) === String(currentLoggedInId);
 
-
-    // --- Renderizado de Carga/Error (Sin cambios) ---
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -428,15 +344,14 @@ export default function PerfilUsuarioScreen() {
         );
     }
 
-    // --- Renderizado Principal (Sin cambios estructurales) ---
     return (
         <SafeAreaView style={styles.safeAreaContainer}> 
-            <StatusBar barStyle="light-content" backgroundColor="black" /> 
+            <StatusBar barStyle="light-content" backgroundColor="black" translucent={false} /> 
             <ImageBackground source={fondoLogin} style={styles.background}>
                 <View style={styles.overlay}>
-                    <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+                    {/* HEADER FIJO - Fuera del ScrollView */}
+                    <View style={styles.fixedHeader}>
                         <View style={styles.profileHeader}>
-                            
                             <View style={styles.profileInfoGroup}> 
                                 <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                                     <Ionicons name="arrow-back" size={28} color="#fff" />
@@ -471,10 +386,14 @@ export default function PerfilUsuarioScreen() {
                                     <Ionicons name="settings-outline" size={28} color="#fff" />
                                 </TouchableOpacity>
                             )}
-                            
                         </View>
+                    </View>
 
-                        {/* ✅ Bloque de Métricas (AHORA con datos y navegación) */}
+                    {/* CONTENIDO SCROLLABLE */}
+                    <ScrollView 
+                        contentContainerStyle={styles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                    >
                         <View style={styles.compactMetricsContainer}>
                             <TouchableOpacity onPress={navigateToFollowers} style={styles.compactMetricItem}>
                                 <Text style={styles.compactMetricNumber}>{followMetrics.followersCount}</Text>
@@ -491,7 +410,6 @@ export default function PerfilUsuarioScreen() {
                                 <Text style={styles.compactMetricLabel}>Publicaciones</Text>
                             </View>
                         </View>
-
 
                         <View style={styles.profileDetailsContainer}>
                             <Text style={styles.detailText}>
@@ -529,15 +447,12 @@ export default function PerfilUsuarioScreen() {
                                 <Text style={styles.publicationsPlaceholder}>Aún no hay publicaciones</Text>
                             )}
                         </View>
-                        
                     </ScrollView>
                 </View>
             </ImageBackground>
         </SafeAreaView>
     );
 }
-
-// --- ESTILOS ---
 
 const styles = StyleSheet.create({
     safeAreaContainer: {
@@ -552,17 +467,21 @@ const styles = StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: "rgba(0,0,0,0.85)",
-        paddingHorizontal: 30, 
         width: "100%",
-        paddingTop: 0, 
+    },
+    fixedHeader: {
+        backgroundColor: "rgba(0,0,0,0.95)",
+        paddingHorizontal: 30,
+        paddingTop: 20,
+        paddingBottom: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
     },
     profileHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
-        paddingTop: 20, 
-        position: 'relative',
+        marginTop: 25,
     },
     
     profileInfoGroup: {
@@ -599,6 +518,11 @@ const styles = StyleSheet.create({
         fontSize: 15,
         color: '#00aaff',
         marginTop: 3,
+    },
+    scrollContent: {
+        paddingHorizontal: 30,
+        paddingTop: 20,
+        paddingBottom: 30,
     },
     profileDetailsContainer: {
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -679,5 +603,77 @@ const styles = StyleSheet.create({
     },
     compactMetricSeparator: {
         width: 1, height: '70%', backgroundColor: '#444', 
+    },
+});
+
+const postStyles = StyleSheet.create({
+    postCard: {
+        backgroundColor: '#000000', 
+        borderRadius: 0,
+        padding: 15,
+        marginBottom: 25, 
+        width: '100%',
+        shadowColor: 'transparent',
+        shadowOpacity: 0, 
+        elevation: 0,
+    },
+    postHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between', 
+        marginBottom: 10,
+    },
+    authorInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    authorImage: {
+        width: 45,
+        height: 45,
+        borderRadius: 22.5,
+        marginRight: 10,
+        borderWidth: 2,
+        borderColor: '#00aaff',
+    },
+    authorUsername: {
+        color: '#00aaff',
+        fontWeight: 'bold',
+        fontSize: 16,
+    },
+    postContent: {
+        color: '#eee',
+        fontSize: 16,
+        lineHeight: 22,
+        marginBottom: 10,
+    },
+    postImage: {
+        width: '100%',
+        height: 250, 
+        borderRadius: 8,
+        marginBottom: 10,
+        resizeMode: 'cover',
+    },
+    postDate: {
+        color: '#888',
+        fontSize: 12,
+    },
+    postActions: { 
+        flexDirection: 'row',
+        paddingVertical: 8,
+        borderTopWidth: 0, 
+        borderTopColor: 'transparent',
+        marginBottom: 5,
+    },
+    actionButton: { 
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 20,
+        padding: 5,
+    },
+    actionText: { 
+        color: '#eee',
+        fontSize: 14,
+        marginLeft: 5,
+        fontWeight: '600',
     },
 });

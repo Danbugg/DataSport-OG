@@ -7,25 +7,33 @@ import {
     ScrollView,
     Image,
     TouchableOpacity,
+    SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 const API_BASE_URL = "http://localhost:3000";
 
+// COMPONENTE PRINCIPAL: DetalleLigaScreen
+
 export default function DetalleLigaScreen({ route }) {
     const navigation = useNavigation();
+    // Obtiene el ID de la liga desde la ruta
     const { itemId } = route.params;
 
+    // ESTADOS
     const [liga, setLiga] = useState(null);
     const [equipos, setEquipos] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    // Carga los detalles de la liga al montar el componente
     useEffect(() => {
         cargarDetalleLiga();
     }, []);
 
+    // Obtener datos de la liga y su lista de equipos
     const cargarDetalleLiga = async () => {
         try {
+            // Llama al endpoint de detalle de liga 
             const response = await fetch(`${API_BASE_URL}/liga/${itemId}`);
             const data = await response.json();
             
@@ -35,6 +43,7 @@ export default function DetalleLigaScreen({ route }) {
             }
 
             setLiga(data);
+            // La respuesta ya contiene la lista de equipos
             setEquipos(data.equipos || []);
         } catch (error) {
             console.error("Error al cargar detalle de liga:", error);
@@ -43,103 +52,121 @@ export default function DetalleLigaScreen({ route }) {
         }
     };
 
+    // Navegar al detalle del equipo
     const navegarAEquipo = (equipo) => {
+        // Navega a la siguiente capa jerárquica 
         navigation.navigate("DetalleEquipoScreen", {
             itemId: equipo.id_equipo || equipo.id,
             itemData: equipo,
         });
     };
 
+    // Renderizado Condicional: Carga y Error
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#00aaff" />
-                <Text style={styles.loadingText}>Cargando liga...</Text>
-            </View>
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#00aaff" />
+                    <Text style={styles.loadingText}>Cargando liga...</Text>
+                </View>
+            </SafeAreaView>
         );
     }
 
     if (!liga) {
         return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>No se pudo cargar la información de la liga</Text>
-            </View>
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.errorContainer}>
+                    <Text style={styles.errorText}>No se pudo cargar la información de la liga</Text>
+                </View>
+            </SafeAreaView>
         );
     }
 
+    // Renderizado Principal
     return (
-        <ScrollView style={styles.container}>
-            {/* Header de la Liga */}
-            <View style={styles.header}>
-                <View style={styles.logoPlaceholder}>
-                    <Text style={styles.logoText}>🏆</Text>
-                </View>
-                <Text style={styles.nombreLiga}>{liga.nombre}</Text>
-                {liga.pais && (
-                    <Text style={styles.pais}>📍 {liga.pais}</Text>
-                )}
-                {liga.nivel && (
-                    <View style={styles.nivelBadge}>
-                        <Text style={styles.nivelText}>División {liga.nivel}</Text>
+        <SafeAreaView style={styles.safeArea}>
+            <ScrollView style={styles.container}>
+                {/* Header de la Liga */}
+                <View style={styles.header}>
+                    <View style={styles.logoPlaceholder}>
+                        <Text style={styles.logoText}>🏆</Text>
                     </View>
-                )}
-            </View>
-
-            {/* Información adicional */}
-            <View style={styles.infoContainer}>
-                <View style={styles.statCard}>
-                    <Text style={styles.statNumber}>{equipos.length}</Text>
-                    <Text style={styles.statLabel}>Equipos</Text>
+                    <Text style={styles.nombreLiga}>{liga.nombre}</Text>
+                    {liga.pais && (
+                        <Text style={styles.pais}>📍 {liga.pais}</Text>
+                    )}
+                    {/* Badge con el nivel de división */}
+                    {liga.nivel && (
+                        <View style={styles.nivelBadge}>
+                            <Text style={styles.nivelText}>División {liga.nivel}</Text>
+                        </View>
+                    )}
                 </View>
-                <View style={styles.statCard}>
-                    <Text style={styles.statNumber}>{liga.pais}</Text>
-                    <Text style={styles.statLabel}>País</Text>
+
+                {/* Estadísticas Básicas (Conteo de Equipos y País) */}
+                <View style={styles.infoContainer}>
+                    <View style={styles.statCard}>
+                        <Text style={styles.statNumber}>{equipos.length}</Text>
+                        <Text style={styles.statLabel}>Equipos</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                        <Text style={styles.statNumber}>{liga.pais}</Text>
+                        <Text style={styles.statLabel}>País</Text>
+                    </View>
                 </View>
-            </View>
 
-            {/* Lista de Equipos */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                    Equipos ({equipos.length})
-                </Text>
-
-                {equipos.length === 0 ? (
-                    <Text style={styles.noDataText}>
-                        No hay equipos registrados en esta liga
+                {/* Sección: Lista de Equipos */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>
+                        Equipos ({equipos.length})
                     </Text>
-                ) : (
-                    equipos.map((equipo, index) => (
-                        <TouchableOpacity
-                            key={equipo.id_equipo || equipo.id || index}
-                            style={styles.equipoCard}
-                            onPress={() => navegarAEquipo(equipo)}
-                        >
-                            <View style={styles.equipoLogoPlaceholder}>
-                                <Text style={styles.equipoLogoText}>⚽</Text>
-                            </View>
-                            <View style={styles.equipoInfo}>
-                                <Text style={styles.equipoNombre}>{equipo.nombre}</Text>
-                                {equipo.ciudad && (
-                                    <Text style={styles.equipoCiudad}>
-                                        📍 {equipo.ciudad}
-                                    </Text>
-                                )}
-                                {equipo.estadio && (
-                                    <Text style={styles.equipoEstadio}>
-                                        🏟️ {equipo.estadio}
-                                    </Text>
-                                )}
-                            </View>
-                            <Text style={styles.arrow}>›</Text>
-                        </TouchableOpacity>
-                    ))
-                )}
-            </View>
-        </ScrollView>
+
+                    {equipos.length === 0 ? (
+                        <Text style={styles.noDataText}>
+                            No hay equipos registrados en esta liga
+                        </Text>
+                    ) : (
+                        // Mapeo para mostrar la lista de equipos navegables
+                        equipos.map((equipo, index) => (
+                            <TouchableOpacity
+                                key={equipo.id_equipo || equipo.id || index}
+                                style={styles.equipoCard}
+                                onPress={() => navegarAEquipo(equipo)}
+                            >
+                                <View style={styles.equipoLogoPlaceholder}>
+                                    <Text style={styles.equipoLogoText}>⚽</Text>
+                                </View>
+                                <View style={styles.equipoInfo}>
+                                    <Text style={styles.equipoNombre}>{equipo.nombre}</Text>
+                                    {equipo.ciudad && (
+                                        <Text style={styles.equipoCiudad}>
+                                            📍 {equipo.ciudad}
+                                        </Text>
+                                    )}
+                                    {equipo.estadio && (
+                                        <Text style={styles.equipoEstadio}>
+                                            🏟️ {equipo.estadio}
+                                        </Text>
+                                    )}
+                                </View>
+                                <Text style={styles.arrow}>›</Text>
+                            </TouchableOpacity>
+                        ))
+                    )}
+                </View>
+            </ScrollView>
+        </SafeAreaView>
     );
 }
 
+// ESTILOS
+
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: "#000",
+    },
     container: {
         flex: 1,
         backgroundColor: "#000",
@@ -197,7 +224,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     pais: {
-        fontSize: 16,
+        fontSize: 14,
         color: "#aaa",
         marginTop: 5,
     },

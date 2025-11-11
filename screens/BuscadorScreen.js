@@ -14,10 +14,13 @@ import { useNavigation } from "@react-navigation/native";
 
 const API_BASE_URL = "http://localhost:3000";
 
+// COMPONENTE PRINCIPAL: BuscadorScreen
+
 export default function BuscadorScreen({ route }) {
     const navigation = useNavigation();
     const { userId } = route.params || {};
 
+    // ESTADOS DE BÚSQUEDA
     const [termino, setTermino] = useState("");
     const [resultados, setResultados] = useState({
         ligas: [],
@@ -27,27 +30,34 @@ export default function BuscadorScreen({ route }) {
     });
     const [loading, setLoading] = useState(false);
 
+    // Optimización de Rendimiento
     useEffect(() => {
+        // Limpiar resultados si el término está vacío
         if (termino.length === 0) {
             setResultados({ ligas: [], equipos: [], jugadores: [], usuarios: [] });
             return;
         }
 
+        // Delay de 800ms para evitar múltiples peticiones rápidas 
         const timeoutId = setTimeout(() => {
             buscar(termino);
         }, 800);
 
+        // Función de limpieza: cancela el timer si el usuario escribe de nuevo
         return () => clearTimeout(timeoutId);
     }, [termino]);
 
+    // FUNCIÓN: Ejecutar Búsqueda en el Backend
     const buscar = async (q) => {
         setLoading(true);
         try {
+            // Llama al endpoint de búsqueda unificada 
             const response = await fetch(
                 `${API_BASE_URL}/buscar?q=${encodeURIComponent(q)}`
             );
             const data = await response.json();
-            setResultados(data);
+            // Los resultados incluyen 4 categorías (ligas, equipos, jugadores, usuarios)
+            setResultados(data); 
         } catch (error) {
             console.error("Error en búsqueda:", error);
         } finally {
@@ -55,10 +65,12 @@ export default function BuscadorScreen({ route }) {
         }
     };
 
+    // Navegación al Detalle
     const handlePress = (item, tipo) => {
         let screenName;
         let itemId;
 
+        // Mapeo dinámico a la pantalla de detalle correcta
         if (tipo === "liga") {
             screenName = "DetalleLigaScreen";
             itemId = item.id_liga;
@@ -70,17 +82,20 @@ export default function BuscadorScreen({ route }) {
             itemId = item.id_jugador;
         } else if (tipo === "usuario") {
             screenName = "PerfilUsuarioScreen";
-            itemId = item.id_usuario;
+            // Usamos el ID de usuario del perfil para la navegación
+            itemId = item.id_usuario; 
         }
 
         if (screenName) {
             navigation.navigate(screenName, {
-                itemId: itemId || item.elementId,
+                // Se asegura de enviar el ID correcto para la ruta
+                itemId: itemId || item.elementId, 
                 itemData: item,
             });
         }
     };
 
+    // Busqueda de Ligas y Equipos
     const renderItem = ({ item, tipo }) => (
         <TouchableOpacity
             style={styles.item}
@@ -90,28 +105,34 @@ export default function BuscadorScreen({ route }) {
         </TouchableOpacity>
     );
 
+    // Busqueda de Jugador 
     const renderJugador = ({ item }) => (
         <TouchableOpacity
             style={styles.itemJugador}
             onPress={() => handlePress(item, "jugador")}
         >
             {item.foto ? (
+                // Lógica para mostrar la imagen 
                 <Image source={{ uri: item.foto }} style={styles.jugadorImagen} />
             ) : (
+                // imágenes faltantes
                 <View style={styles.jugadorPlaceholder} />
             )}
             <Text style={styles.itemText}>{item.nombre}</Text>
         </TouchableOpacity>
     );
 
+    // Usuario Incluye Imagen de Perfil y username
     const renderUsuario = ({ item }) => (
         <TouchableOpacity
             style={styles.itemJugador}
             onPress={() => handlePress(item, "usuario")}
         >
             {item.foto_perfil ? (
+                // Carga la foto de perfil (URL completa gestionada en el backend)
                 <Image source={{ uri: item.foto_perfil }} style={styles.jugadorImagen} />
             ) : (
+                // Placeholder si no tiene foto
                 <View style={styles.jugadorPlaceholder} />
             )}
             <Text style={styles.itemText}>
@@ -120,14 +141,18 @@ export default function BuscadorScreen({ route }) {
         </TouchableOpacity>
     );
 
+    // Control para mostrar el mensaje de "No hay resultados"
     const hayResultados =
         resultados.ligas.length > 0 ||
         resultados.equipos.length > 0 ||
         resultados.jugadores.length > 0 ||
         resultados.usuarios.length > 0;
 
+    // ESTRUCTURA VISUAL DE LA PANTALLA
+
     return (
         <View style={styles.container}>
+            {/* Input de Búsqueda */}
             <TextInput
                 placeholder="Buscar ligas, equipos, jugadores o usuarios..."
                 placeholderTextColor="#999"
@@ -136,15 +161,20 @@ export default function BuscadorScreen({ route }) {
                 style={styles.input}
             />
 
+            {/* Indicador de Carga */}
             {loading && <ActivityIndicator size="large" color="#00aaff" />}
 
+            {/* Mensaje de No Resultados */}
             {termino.length > 0 && !loading && !hayResultados && (
                 <Text style={styles.noResultsText}>
                     No se encontraron resultados para "{termino}".
                 </Text>
             )}
 
+            {/* Contenedor Principal de Resultados */}
             <ScrollView contentContainerStyle={styles.scrollContent}>
+                
+                {/* Sección: Ligas */}
                 {resultados.ligas.length > 0 && (
                     <View style={styles.section}>
                         <Text style={styles.title}>Ligas</Text>
@@ -157,6 +187,7 @@ export default function BuscadorScreen({ route }) {
                     </View>
                 )}
 
+                {/* Sección: Equipos */}
                 {resultados.equipos.length > 0 && (
                     <View style={styles.section}>
                         <Text style={styles.title}>Equipos</Text>
@@ -169,6 +200,7 @@ export default function BuscadorScreen({ route }) {
                     </View>
                 )}
 
+                {/* Sección: Jugadores */}
                 {resultados.jugadores.length > 0 && (
                     <View style={styles.section}>
                         <Text style={styles.title}>Jugadores</Text>
@@ -181,6 +213,7 @@ export default function BuscadorScreen({ route }) {
                     </View>
                 )}
 
+                {/* Sección: Usuarios */}
                 {resultados.usuarios.length > 0 && (
                     <View style={styles.section}>
                         <Text style={styles.title}>Usuarios</Text>
@@ -197,6 +230,7 @@ export default function BuscadorScreen({ route }) {
     );
 }
 
+// ESTILOS
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -213,7 +247,8 @@ const styles = StyleSheet.create({
         marginBottom: 20,
         color: "#fff",
         backgroundColor: "#1a1a1a",
-        fontSize: 16,
+        fontSize: 15,
+        paddingTop: 15
     },
     scrollContent: {
         paddingBottom: 20,
@@ -252,27 +287,25 @@ const styles = StyleSheet.create({
         borderLeftWidth: 3,
         borderLeftColor: "#00aaff",
     },
-jugadorImagen: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 15,
-    borderWidth: 1,
-    borderColor: '#00aaff',
-    resizeMode: 'contain', // 🔹 muestra la imagen completa sin cortar
-    backgroundColor: '#111', // 🔹 relleno si la imagen no cubre todo
-},
-
-jugadorPlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 15,
-    backgroundColor: "#333",
-    borderWidth: 1,
-    borderColor: '#00aaff',
-},
-
+    jugadorImagen: {
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+        marginRight: 15,
+        borderWidth: 1,
+        borderColor: '#00aaff',
+        resizeMode: 'contain',
+        backgroundColor: '#111',
+    },
+    jugadorPlaceholder: {
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+        marginRight: 15,
+        backgroundColor: "#333",
+        borderWidth: 1,
+        borderColor: '#00aaff',
+    },
     noResultsText: {
         color: "#999",
         textAlign: "center",

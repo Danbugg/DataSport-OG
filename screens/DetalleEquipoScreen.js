@@ -6,15 +6,19 @@ import {
     ActivityIndicator,
     ScrollView,
     TouchableOpacity,
+    SafeAreaView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 const API_BASE_URL = "http://localhost:3000";
 
+// COMPONENTE PRINCIPAL: DetalleEquipoScreen
+
 export default function DetalleEquipoScreen({ route }) {
     const navigation = useNavigation();
     const { itemId } = route.params;
 
+    // ESTADOS
     const [equipo, setEquipo] = useState(null);
     const [jugadores, setJugadores] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -34,7 +38,7 @@ export default function DetalleEquipoScreen({ route }) {
             }
 
             setEquipo(data);
-            setJugadores(data.jugadores || []);
+            setJugadores(data.jugadores || []); 
         } catch (error) {
             console.error("Error al cargar detalle de equipo:", error);
         } finally {
@@ -49,7 +53,6 @@ export default function DetalleEquipoScreen({ route }) {
         });
     };
 
-    // Agrupar jugadores por posición
     const jugadoresPorPosicion = {
         Portero: jugadores.filter(j => j.posicion === 'Portero'),
         Defensa: jugadores.filter(j => j.posicion === 'Defensa'),
@@ -59,132 +62,140 @@ export default function DetalleEquipoScreen({ route }) {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
+            <SafeAreaView style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#00aaff" />
                 <Text style={styles.loadingText}>Cargando equipo...</Text>
-            </View>
+            </SafeAreaView>
         );
     }
 
     if (!equipo) {
         return (
-            <View style={styles.errorContainer}>
+            <SafeAreaView style={styles.errorContainer}>
                 <Text style={styles.errorText}>No se pudo cargar la información del equipo</Text>
-            </View>
+            </SafeAreaView>
         );
     }
 
     return (
-        <ScrollView style={styles.container}>
-            {/* Header del Equipo */}
-            <View style={styles.header}>
-                <View style={styles.logoPlaceholder}>
-                    <Text style={styles.logoText}>⚽</Text>
-                </View>
-                <Text style={styles.nombreEquipo}>{equipo.nombre}</Text>
-                {equipo.ciudad && (
-                    <Text style={styles.ciudad}>📍 {equipo.ciudad}</Text>
-                )}
-                {equipo.liga_nombre && (
-                    <View style={styles.ligaBadge}>
-                        <Text style={styles.ligaText}>{equipo.liga_nombre}</Text>
+        <SafeAreaView style={styles.safeArea}>
+            <ScrollView style={styles.container}>
+                {/* Header del Equipo */}
+                <View style={styles.header}>
+                    <View style={styles.logoPlaceholder}>
+                        <Text style={styles.logoText}>⚽</Text>
                     </View>
-                )}
-            </View>
-
-            {/* Información del equipo */}
-            <View style={styles.infoContainer}>
-                {equipo.estadio && (
-                    <View style={styles.infoCard}>
-                        <Text style={styles.infoLabel}>Estadio</Text>
-                        <Text style={styles.infoValue}>{equipo.estadio}</Text>
-                    </View>
-                )}
-                
-                <View style={styles.infoCard}>
-                    <Text style={styles.infoLabel}>Plantilla</Text>
-                    <Text style={styles.infoValue}>{jugadores.length} jugadores</Text>
+                    <Text style={styles.nombreEquipo}>{equipo.nombre}</Text>
+                    {equipo.ciudad && (
+                        <Text style={styles.ciudad}>📍{equipo.ciudad}</Text>
+                    )}
+                    {equipo.liga_nombre && (
+                        <View style={styles.ligaBadge}>
+                            <Text style={styles.ligaText}>{equipo.liga_nombre}</Text>
+                        </View>
+                    )}
                 </View>
 
-                {equipo.liga_pais && (
+                {/* Información clave del equipo */}
+                <View style={styles.infoContainer}>
+                    {equipo.estadio && (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>Estadio</Text>
+                            <Text style={styles.infoValue}>{equipo.estadio}</Text>
+                        </View>
+                    )}
+                    
                     <View style={styles.infoCard}>
-                        <Text style={styles.infoLabel}>País</Text>
-                        <Text style={styles.infoValue}>{equipo.liga_pais}</Text>
+                        <Text style={styles.infoLabel}>Plantilla</Text>
+                        <Text style={styles.infoValue}>{jugadores.length} jugadores</Text>
                     </View>
-                )}
-            </View>
 
-            {/* Plantilla por posiciones */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>
-                    Plantilla ({jugadores.length})
-                </Text>
+                    {equipo.liga_pais && (
+                        <View style={styles.infoCard}>
+                            <Text style={styles.infoLabel}>País de la Liga</Text>
+                            <Text style={styles.infoValue}>{equipo.liga_pais}</Text>
+                        </View>
+                    )}
+                </View>
 
-                {jugadores.length === 0 ? (
-                    <Text style={styles.noDataText}>
-                        No hay jugadores registrados en este equipo
+                {/* Sección de Plantilla */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>
+                        Plantilla ({jugadores.length})
                     </Text>
-                ) : (
-                    Object.entries(jugadoresPorPosicion).map(([posicion, jugadoresPosicion]) => {
-                        if (jugadoresPosicion.length === 0) return null;
-                        
-                        return (
-                            <View key={posicion} style={styles.posicionGroup}>
-                                <Text style={styles.posicionTitle}>
-                                    {posicion === 'Portero' && '🧤 '}
-                                    {posicion === 'Defensa' && '🛡️ '}
-                                    {posicion === 'Centrocampista' && '⚙️ '}
-                                    {posicion === 'Delantero' && '⚡ '}
-                                    {posicion} ({jugadoresPosicion.length})
-                                </Text>
-                                
-                                {jugadoresPosicion.map((jugador, index) => (
-                                    <TouchableOpacity
-                                        key={jugador.id_jugador || jugador.id || index}
-                                        style={styles.jugadorCard}
-                                        onPress={() => navegarAJugador(jugador)}
-                                    >
-                                        <View style={styles.jugadorFotoPlaceholder}>
-                                            <Text style={styles.jugadorFotoText}>👤</Text>
-                                        </View>
-                                        <View style={styles.jugadorInfo}>
-                                            <Text style={styles.jugadorNombre}>{jugador.nombre}</Text>
-                                            {jugador.nacionalidad && (
-                                                <Text style={styles.jugadorNacionalidad}>
-                                                    🌍 {jugador.nacionalidad}
-                                                </Text>
-                                            )}
-                                            <View style={styles.jugadorStats}>
-                                                {jugador.edad && (
-                                                    <Text style={styles.jugadorStat}>
-                                                        {jugador.edad} años
-                                                    </Text>
-                                                )}
-                                                {jugador.goles > 0 && (
-                                                    <Text style={styles.jugadorStat}>
-                                                        ⚽ {jugador.goles}
-                                                    </Text>
-                                                )}
-                                                {jugador.asistencias > 0 && (
-                                                    <Text style={styles.jugadorStat}>
-                                                        🎯 {jugador.asistencias}
-                                                    </Text>
-                                                )}
+
+                    {jugadores.length === 0 ? (
+                        <Text style={styles.noDataText}>
+                            No hay jugadores registrados en este equipo
+                        </Text>
+                    ) : (
+                        Object.entries(jugadoresPorPosicion).map(([posicion, jugadoresPosicion]) => {
+                            if (jugadoresPosicion.length === 0) return null;
+                            
+                            return (
+                                <View key={posicion} style={styles.posicionGroup}>
+                                    <Text style={styles.posicionTitle}>
+                                        {posicion === 'Portero' && '🧤 '}
+                                        {posicion === 'Defensa' && '🛡️ '}
+                                        {posicion === 'Centrocampista' && '⚙️ '}
+                                        {posicion === 'Delantero' && '⚡ '}
+                                        {posicion} ({jugadoresPosicion.length})
+                                    </Text>
+                                    
+                                    {jugadoresPosicion.map((jugador, index) => (
+                                        <TouchableOpacity
+                                            key={jugador.id_jugador || jugador.id || index}
+                                            style={styles.jugadorCard}
+                                            onPress={() => navegarAJugador(jugador)}
+                                        >
+                                            <View style={styles.jugadorFotoPlaceholder}>
+                                                <Text style={styles.jugadorFotoText}>👤</Text>
                                             </View>
-                                        </View>
-                                        <Text style={styles.arrow}>›</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
-                        );
-                    })
-                )}
-            </View>
-        </ScrollView>
+                                            <View style={styles.jugadorInfo}>
+                                                <Text style={styles.jugadorNombre}>{jugador.nombre}</Text>
+                                                {jugador.nacionalidad && (
+                                                    <Text style={styles.jugadorNacionalidad}>
+                                                        🌍 {jugador.nacionalidad}
+                                                    </Text>
+                                                )}
+                                                <View style={styles.jugadorStats}>
+                                                    {jugador.edad && (
+                                                        <Text style={styles.jugadorStat}>
+                                                            {jugador.edad} años
+                                                        </Text>
+                                                    )}
+                                                    {jugador.goles > 0 && (
+                                                        <Text style={styles.jugadorStat}>
+                                                            ⚽ {jugador.goles}
+                                                        </Text>
+                                                    )}
+                                                    {jugador.asistencias > 0 && (
+                                                        <Text style={styles.jugadorStat}>
+                                                            🎯 {jugador.asistencias}
+                                                        </Text>
+                                                    )}
+                                                </View>
+                                            </View>
+                                            <Text style={styles.arrow}>›</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            );
+                        })
+                    )}
+                </View>
+            </ScrollView>
+        </SafeAreaView>
     );
 }
 
+// ESTILOS
+
 const styles = StyleSheet.create({
+    safeArea: {
+        flex: 1,
+        backgroundColor: "#000",
+    },
     container: {
         flex: 1,
         backgroundColor: "#000",

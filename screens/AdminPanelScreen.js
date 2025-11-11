@@ -21,14 +21,17 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_BASE_URL = "http://localhost:3000";
 
+// COMPONENTE PRINCIPAL: AdminPanelScreen
 export default function AdminPanelScreen() {
     const navigation = useNavigation();
     const fondoLogin = require("../assets/fondoLogin.jpg");
 
+    // 1. ESTADOS DE INTERFAZ Y DATOS
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [activeTab, setActiveTab] = useState('reportedPosts');
     
+    // Data del Panel
     const [reportedPosts, setReportedPosts] = useState([]);
     const [users, setUsers] = useState([]);
     const [stats, setStats] = useState({
@@ -38,21 +41,24 @@ export default function AdminPanelScreen() {
         activeUsers: 0,
     });
 
-    // Estados para modales personalizados
+    // 2. ESTADOS DE MODALES Y ACCIÓN
     const [deleteModalVisible, setDeleteModalVisible] = useState(false);
     const [dismissModalVisible, setDismissModalVisible] = useState(false);
     const [suspendModalVisible, setSuspendModalVisible] = useState(false);
     const [selectedPostId, setSelectedPostId] = useState(null);
     const [selectedUserId, setSelectedUserId] = useState(null);
     const [selectedUserStatus, setSelectedUserStatus] = useState(null);
-    const [deleteReason, setDeleteReason] = useState('');
+    const [deleteReason, setDeleteReason] = useState(''); // Estado para la razón de eliminación
     
-    // Estados para modales de éxito y error
+    // Modales de feedback
     const [successModalVisible, setSuccessModalVisible] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [errorModalVisible, setErrorModalVisible] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
 
+    // 🛡️ LÓGICA DE SEGURIDAD Y CARGA DE DATOS
+
+    // Verificar Permisos de Administrador 
     const checkAdminStatus = async () => {
         try {
             const userId = await AsyncStorage.getItem("userId");
@@ -82,6 +88,7 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // Cargar Publicaciones Reportadas
     const fetchReportedPosts = async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/admin/reported-posts`);
@@ -94,6 +101,7 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // Cargar Lista de Usuarios
     const fetchUsers = async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/admin/users`);
@@ -106,6 +114,7 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // Cargar Estadísticas Globales
     const fetchStats = async () => {
         try {
             const response = await fetch(`${API_BASE_URL}/admin/stats`);
@@ -123,6 +132,7 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // Carga Inicial de Datos 
     const loadData = async () => {
         const isAdmin = await checkAdminStatus();
         if (!isAdmin) return;
@@ -136,24 +146,30 @@ export default function AdminPanelScreen() {
         setLoading(false);
     };
 
+    // Refrescar Datos
     const onRefresh = async () => {
         setRefreshing(true);
         await loadData();
         setRefreshing(false);
     };
 
+    // Cargar datos al enfocar la pantalla
     useFocusEffect(
         useCallback(() => {
             loadData();
         }, [])
     );
 
+    // LÓGICA DE ACCIONES (MANEJO DE REPORTES)
+
+    // Iniciar Modal de Eliminación (Recoge el ID y prepara la razón)
     const handleDeletePost = (postId) => {
         setSelectedPostId(postId);
         setDeleteReason('');
         setDeleteModalVisible(true);
     };
 
+    // Ejecutar Eliminación de Publicación 
     const executeDeletePost = async () => {
         if (!deleteReason.trim()) {
             setErrorMessage("Debes ingresar una razón para eliminar la publicación.");
@@ -171,14 +187,14 @@ export default function AdminPanelScreen() {
                 body: JSON.stringify({ 
                     adminId: userId,
                     reason: deleteReason 
-                }),
+                }), // Envía adminId y la razón
             });
 
             if (response.ok) {
                 setSuccessMessage("Publicación eliminada correctamente.");
                 setSuccessModalVisible(true);
-                fetchReportedPosts();
-                fetchStats();
+                fetchReportedPosts(); // Refresca lista de reportes
+                fetchStats(); // Refresca el contador de reportes
             } else {
                 const data = await response.json().catch(() => ({}));
                 setErrorMessage(data.error || "No se pudo eliminar la publicación.");
@@ -191,11 +207,13 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // Iniciar Modal de Descarte de Reporte
     const handleDismissReport = (postId) => {
         setSelectedPostId(postId);
         setDismissModalVisible(true);
     };
 
+    // Ejecutar Descarte de Reporte
     const executeDismissReport = async () => {
         setDismissModalVisible(false);
 
@@ -210,7 +228,7 @@ export default function AdminPanelScreen() {
             if (response.ok) {
                 setSuccessMessage("Reporte descartado correctamente.");
                 setSuccessModalVisible(true);
-                fetchReportedPosts();
+                fetchReportedPosts(); // Refresca lista de reportes
             } else {
                 const data = await response.json().catch(() => ({}));
                 setErrorMessage(data.error || "No se pudo descartar el reporte.");
@@ -223,12 +241,16 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // LÓGICA DE ACCIONES (GESTOR DE USUARIOS)
+
+    // Iniciar Modal de Suspensión o Activación
     const handleToggleUserStatus = (userId, currentStatus) => {
         setSelectedUserId(userId);
         setSelectedUserStatus(currentStatus);
         setSuspendModalVisible(true);
     };
 
+    // Ejecutar Cambio de Estado de Usuario
     const executeToggleUserStatus = async () => {
         setSuspendModalVisible(false);
 
@@ -244,7 +266,7 @@ export default function AdminPanelScreen() {
                 const action = selectedUserStatus === 'active' ? 'suspendido' : 'activado';
                 setSuccessMessage(`Usuario ${action} correctamente.`);
                 setSuccessModalVisible(true);
-                fetchUsers();
+                fetchUsers(); // Refresca la lista de usuarios
             } else {
                 const data = await response.json().catch(() => ({}));
                 setErrorMessage(data.error || "No se pudo cambiar el estado del usuario.");
@@ -257,6 +279,9 @@ export default function AdminPanelScreen() {
         }
     };
 
+    // RENDERIZADO DE ELEMENTOS DE LISTA
+
+    // Tarjeta de Publicación Reportada
     const renderReportedPost = ({ item }) => (
         <View style={styles.reportCard}>
             <View style={styles.reportHeader}>
@@ -298,6 +323,7 @@ export default function AdminPanelScreen() {
         </View>
     );
 
+    // Tarjeta de Usuario (con botón de Suspensión)
     const renderUser = ({ item }) => (
         <View style={styles.userCard}>
             <Image
@@ -312,6 +338,7 @@ export default function AdminPanelScreen() {
                 </Text>
             </View>
             
+            {/* Botón de acción solo para usuarios normales */}
             {item.rol_id !== 2 && (
                 <TouchableOpacity
                     style={[
@@ -333,6 +360,7 @@ export default function AdminPanelScreen() {
         </View>
     );
 
+    // Grid de Estadísticas
     const renderStats = () => (
         <View style={styles.statsContainer}>
             <View style={styles.statCard}>
@@ -361,7 +389,9 @@ export default function AdminPanelScreen() {
         </View>
     );
 
-    // MODAL DE ELIMINACIÓN CON RAZÓN - CORREGIDO
+    // 💡 MODALES DE CONFIRMACIÓN Y FEEDBACK
+
+    // Modal: Confirmación de Eliminación con Campo de Razón
     const DeletePostModal = () => (
         <Modal
             animationType="fade"
@@ -382,7 +412,7 @@ export default function AdminPanelScreen() {
             >
                 <TouchableOpacity 
                     activeOpacity={1}
-                    onPress={(e) => e.stopPropagation()}
+                    onPress={(e) => e.stopPropagation()} // Previene el cierre al tocar el modal
                     style={modalStyles.confirmModalView}
                 >
                     <Ionicons name="trash-outline" size={50} color="#ff3333" style={{ marginBottom: 15 }} />
@@ -427,7 +457,7 @@ export default function AdminPanelScreen() {
         </Modal>
     );
 
-    // MODAL DE DESCARTE
+    // Modal: Confirmación de Descarte de Reporte
     const DismissReportModal = () => (
         <Modal
             animationType="fade"
@@ -472,7 +502,7 @@ export default function AdminPanelScreen() {
         </Modal>
     );
 
-    // MODAL DE SUSPENSIÓN/ACTIVACIÓN
+    // Modal: Confirmación de Suspensión o Activación de Usuario
     const SuspendUserModal = () => (
         <Modal
             animationType="fade"
@@ -532,7 +562,7 @@ export default function AdminPanelScreen() {
         </Modal>
     );
 
-    // MODAL DE ÉXITO
+    // Modal: Feedback de Éxito
     const SuccessModal = () => (
         <Modal
             animationType="fade"
@@ -546,7 +576,7 @@ export default function AdminPanelScreen() {
                 onPress={() => setSuccessModalVisible(false)}
             >
                 <View style={modalStyles.successModalView}>
-                    <Ionicons name="checkmark-circle" size={60} color="#00ff00" style={{ marginBottom: 15 }} />
+                    <Ionicons name="checkmark-circle" size={60} color="#1600a4ff" style={{ marginBottom: 15 }} />
                     
                     <Text style={modalStyles.successTitle}>Éxito</Text>
                     <Text style={modalStyles.successMessage}>{successMessage}</Text>
@@ -562,7 +592,7 @@ export default function AdminPanelScreen() {
         </Modal>
     );
 
-    // MODAL DE ERROR
+    // Modal: Feedback de Error
     const ErrorModal = () => (
         <Modal
             animationType="fade"
@@ -592,6 +622,7 @@ export default function AdminPanelScreen() {
         </Modal>
     );
 
+    // Pantalla de Carga Inicial
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -601,11 +632,14 @@ export default function AdminPanelScreen() {
         );
     }
 
+    // ESTRUCTURA PRINCIPAL DEL PANEL
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="black" />
             <ImageBackground source={fondoLogin} style={styles.background}>
                 <View style={styles.overlay}>
+                    {/* Encabezado y Navegación */}
                     <View style={styles.header}>
                         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                             <Ionicons name="arrow-back" size={28} color="#fff" />
@@ -616,6 +650,7 @@ export default function AdminPanelScreen() {
                         </View>
                     </View>
 
+                    {/* Controles de Pestañas (Tabs) */}
                     <View style={styles.tabContainer}>
                         <TouchableOpacity
                             style={[styles.tab, activeTab === 'stats' && styles.activeTab]}
@@ -643,6 +678,7 @@ export default function AdminPanelScreen() {
                             <Text style={[styles.tabText, activeTab === 'reportedPosts' && styles.activeTabText]}>
                                 Reportes
                             </Text>
+                            {/* Insignia de conteo de reportes pendientes */}
                             {reportedPosts.length > 0 && (
                                 <View style={styles.badge}>
                                     <Text style={styles.badgeText}>{reportedPosts.length}</Text>
@@ -665,6 +701,7 @@ export default function AdminPanelScreen() {
                         </TouchableOpacity>
                     </View>
 
+                    {/* Contenido de la Pestaña Activa */}
                     <ScrollView
                         style={styles.content}
                         refreshControl={
@@ -717,6 +754,7 @@ export default function AdminPanelScreen() {
                 </View>
             </ImageBackground>
 
+            {/* Invocación de Modales */}
             <DeletePostModal />
             <DismissReportModal />
             <SuspendUserModal />
@@ -725,6 +763,8 @@ export default function AdminPanelScreen() {
         </SafeAreaView>
     );
 }
+
+// ESTILOS DEL COMPONENTE Y MODALES
 
 const modalStyles = StyleSheet.create({
     centeredView: {

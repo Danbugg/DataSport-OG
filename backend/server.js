@@ -8,31 +8,28 @@ const crypto = require("crypto");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
-const { Resend } = require('resend'); // ✅ IMPORTAR RESEND
-
+const { Resend } = require('resend');
 const app = express();
 const PORT = 3000;
 
-// ✅ INICIALIZAR RESEND CON TU API KEY
+// 🛠️ CONFIGURACIÓN INICIAL
+
+// Inicializar Resend
 const resend = new Resend('re_gFjMsn7f_2a2L1vmj9SQ3UFC4QHN7aaDa');
 
-// --- IP DEL HOST PARA ACCESO REMOTO (IMÁGENES) ---
-// ⚠️ IMPORTANTE: Mantener en 10.0.2.2 si usas el EMULADOR de Android.
 const HOST_IP = "localhost";
-// -------------------------------------------------
 
-// Función auxiliar para parsear ID a entero de manera segura
+// Parseo seguro de Integer
 const safeParseInt = (value) => {
     if (!value) return null;
     const num = parseInt(value, 10);
     return isNaN(num) ? null : num;
 };
 
-// 🆕 FUNCIÓN AUXILIAR: Obtener detalles de usuario de PostgreSQL y estado de seguimiento de Neo4j
+// Obtener detalles de usuarios con estado de seguimiento
 const fetchUsersDetails = async (userIds, currentUserId) => {
     if (userIds.length === 0) return [];
    
-    // Convertir IDs a enteros para la consulta de la base de datos
     const idsString = userIds.map(id => parseInt(id, 10)).join(',');
 
     try {
@@ -49,12 +46,11 @@ const fetchUsersDetails = async (userIds, currentUserId) => {
         `;
         const result = await pool.query(sqlQuery);
 
-        // 🆕 INICIO: Verificar estado de seguimiento para el usuario actual (currentUserId)
+        //  Verificar estado de seguimiento (Neo4j)
         let followStatus = {};
         if (currentUserId && currentUserId !== 'null' && userIds.length > 0) {
             const session = driver.session();
             try {
-                // Consulta Neo4j para verificar si currentUserId sigue a alguno de los userIds (los de la lista)
                 const cypher = `
                     MATCH (viewer:Usuario {id_usuario: $viewerId})
                     MATCH (followed:Usuario)
@@ -73,12 +69,11 @@ const fetchUsersDetails = async (userIds, currentUserId) => {
                     followStatus[id] = record.get('isFollowing');
                 });
             } catch (neo4jError) {
-                console.error("❌ Error al verificar estado de seguimiento en Neo4j:", neo4jError);
+                console.error("Error al verificar estado de seguimiento en Neo4j:", neo4jError);
             } finally {
                 await session.close();
             }
         }
-        // 🆕 FIN: Verificar estado de seguimiento
 
         const users = result.rows.map(user => {
             let fotoUrl = user.foto_perfil;
@@ -95,7 +90,6 @@ const fetchUsersDetails = async (userIds, currentUserId) => {
                 nombre_usuario: user.nombre_usuario,
                 foto_perfil: fotoUrl || null,
                 descripcion: user.descripcion || '',
-                // ✅ Usar el estado real de Neo4j
                 isFollowing: !!followStatus[userIdNumber],
             };
         });
@@ -103,12 +97,12 @@ const fetchUsersDetails = async (userIds, currentUserId) => {
         return users;
 
     } catch (error) {
-        console.error("❌ Error al obtener detalles de usuarios de PostgreSQL:", error);
+        console.error("Error al obtener detalles de usuarios de PostgreSQL:", error);
         return [];
     }
 };
 
-// Configuración de Multer para la carga de archivos
+// Configuración de la carga de archivos (uploads)
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
@@ -116,7 +110,7 @@ if (!fs.existsSync(uploadDir)) {
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, uploadDir); // Usar la ruta absoluta para la carpeta 'uploads'
+        cb(null, uploadDir); 
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + '-' + file.originalname);
@@ -124,8 +118,8 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
-// ---------------------------------------------
 
+// Conexión PostgreSQL
 const pool = new Pool({
     user: "postgres",
     host: "localhost",
@@ -134,6 +128,7 @@ const pool = new Pool({
     port: 5432,
 });
 
+// Conexión Neo4j (driver)
 const driver = neo4j.driver(
     "bolt://localhost:7687",
     neo4j.auth.basic("neo4j", "administrador")
@@ -141,18 +136,18 @@ const driver = neo4j.driver(
 
 // Middleware
 app.use(cors());
-// Middleware para servir archivos estáticos (imágenes)
 app.use('/uploads', express.static(uploadDir));
-// Aplicar bodyParser.json SOLO a rutas que NO usen multer (la mayoría de tus rutas)
-// Las rutas con multer manejan el body parse por sí mismas
 app.use(bodyParser.json());
 
-// ------------------ HOME ------------------
+// 🏠 ENDPOINT BASE
+
 app.get("/", (req, res) => {
-    res.json({message: "Servidor funcionando 🚀"});
+    res.json({message: "Servidor funcionando "});
 });
 
-// ------------------ REGISTRO ------------------
+// 🔐 AUTENTICACIÓN
+
+// POST: Registro de Usuario
 app.post("/register", async (req, res) => {
     try {
         const {nombre, apellido, email, fecha_nacimiento, nombre_usuario, contrasena} = req.body;
@@ -161,13 +156,11 @@ app.post("/register", async (req, res) => {
             return res.status(400).json({error: "Faltan datos"});
         }
 
-        // Validar correo duplicado
         const checkEmail = await pool.query("SELECT * FROM usuarios WHERE email = $1", [email]);
         if (checkEmail.rows.length > 0) {
             return res.status(400).json({error: "El correo ya existe"});
         }
 
-        // Validar usuario duplicado
         const checkUser = await pool.query("SELECT * FROM usuarios WHERE nombre_usuario = $1", [nombre_usuario]);
         if (checkUser.rows.length > 0) {
             return res.status(400).json({error: "El nombre de usuario ya existe"});
@@ -183,7 +176,7 @@ app.post("/register", async (req, res) => {
         const result = await pool.query(query, values);
         const usuario = result.rows[0];
 
-        // Guardar en Neo4j
+        // Guardar nodo en Neo4j
         const session = driver.session();
         await session.run(
             "CREATE (u:Usuario {id_usuario: $id_usuario, email: $email, username: $username})",
@@ -208,7 +201,7 @@ app.post("/register", async (req, res) => {
     }
 });
 
-// ------------------ LOGIN ------------------
+// POST: Inicio de Sesión
 app.post("/login", async (req, res) => {
     const {email, contrasena} = req.body;
 
@@ -228,12 +221,12 @@ app.post("/login", async (req, res) => {
 
         res.json({message: "Login exitoso", usuario});
     } catch (error) {
-        console.error("❌ Error en /login:", error);
+        console.error("Error en /login:", error);
         res.status(500).json({error: "Error en el servidor"});
     }
 });
 
-// ------------------ RECUPERAR CONTRASEÑA ------------------
+// POST: Solicitar Recuperación de Contraseña (Envío de Email con Resend)
 app.post("/forgot-password", async (req, res) => {
     const { email } = req.body;
     
@@ -253,8 +246,8 @@ app.post("/forgot-password", async (req, res) => {
             [resetToken, resetExpires, user.id_usuario]
         );
 
-        console.log(`📧 Intentando enviar email a: ${email}`);
-        console.log(`🔑 Token generado: ${resetToken}`);
+        console.log(`Intentando enviar email a: ${email}`);
+        console.log(`Token generado: ${resetToken}`);
 
         try {
             const emailResponse = await resend.emails.send({
@@ -273,10 +266,8 @@ app.post("/forgot-password", async (req, res) => {
                     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f7fa; padding: 40px 0;">
                         <tr>
                             <td align="center">
-                                <!-- Container Principal -->
                                 <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
                                     
-                                    <!-- Header con Gradiente -->
                                     <tr>
                                         <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
                                             <h1 style="margin: 0; color: #ffffff; font-size: 32px; font-weight: bold; letter-spacing: 1px;">
@@ -288,7 +279,6 @@ app.post("/forgot-password", async (req, res) => {
                                         </td>
                                     </tr>
                                     
-                                    <!-- Contenido Principal -->
                                     <tr>
                                         <td style="padding: 40px 30px;">
                                             <h2 style="margin: 0 0 20px 0; color: #333333; font-size: 24px; font-weight: 600;">
@@ -300,7 +290,6 @@ app.post("/forgot-password", async (req, res) => {
                                                 Usa el siguiente código de verificación para continuar:
                                             </p>
                                             
-                                            <!-- Token Box -->
                                             <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
                                                 <tr>
                                                     <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; padding: 30px; text-align: center;">
@@ -314,7 +303,6 @@ app.post("/forgot-password", async (req, res) => {
                                                 </tr>
                                             </table>
                                             
-                                            <!-- Información Importante -->
                                             <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fff9e6; border-left: 4px solid #ffc107; border-radius: 6px; padding: 15px; margin: 25px 0;">
                                                 <tr>
                                                     <td>
@@ -332,14 +320,12 @@ app.post("/forgot-password", async (req, res) => {
                                         </td>
                                     </tr>
                                     
-                                    <!-- Separador -->
                                     <tr>
                                         <td style="padding: 0 30px;">
                                             <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 0;">
                                         </td>
                                     </tr>
                                     
-                                    <!-- Footer -->
                                     <tr>
                                         <td style="background-color: #f8f9fa; padding: 30px; text-align: center;">
                                             <p style="margin: 0 0 10px 0; color: #999999; font-size: 13px;">
@@ -359,7 +345,6 @@ app.post("/forgot-password", async (req, res) => {
                                     
                                 </table>
                                 
-                                <!-- Nota de Seguridad -->
                                 <table width="600" cellpadding="0" cellspacing="0" style="margin-top: 20px;">
                                     <tr>
                                         <td style="text-align: center; padding: 0 30px;">
@@ -382,7 +367,7 @@ app.post("/forgot-password", async (req, res) => {
             res.status(200).json({ message: "Código enviado a tu correo." });
 
         } catch (emailError) {
-            console.error('❌ Error al enviar email:', emailError);
+            console.error('Error al enviar email:', emailError);
             await pool.query(
                 "UPDATE usuarios SET reset_password_token = NULL, reset_password_expires = NULL WHERE id_usuario = $1",
                 [user.id_usuario]
@@ -390,12 +375,13 @@ app.post("/forgot-password", async (req, res) => {
             return res.status(500).json({ error: "No se pudo enviar el correo. Intenta nuevamente." });
         }
     } catch (error) {
-        console.error("❌ Error en /forgot-password:", error);
+        console.error("Error en /forgot-password:", error);
         res.status(500).json({ error: "Error en el servidor." });
     }
     
 });
 
+// POST: Verificar Token de Recuperación
 app.post("/verify-token", async (req, res) => {
     const {token} = req.body;
     try {
@@ -411,11 +397,12 @@ app.post("/verify-token", async (req, res) => {
 
         res.status(200).json({message: "Token verificado con éxito."});
     } catch (error) {
-        console.error("❌ Error en /verify-token:", error);
+        console.error("Error en /verify-token:", error);
         res.status(500).json({error: "Error en el servidor."});
     }
 });
 
+// POST: Restablecer Contraseña
 app.post("/reset-password", async (req, res) => {
     const {token, newPassword} = req.body;
     try {
@@ -437,12 +424,44 @@ app.post("/reset-password", async (req, res) => {
 
         res.status(200).json({message: "Contraseña restablecida con éxito."});
     } catch (error) {
-        console.error("❌ Error en /reset-password:", error);
+        console.error("Error en /reset-password:", error);
         res.status(500).json({error: "Error en el servidor."});
     }
 });
 
-// ------------------ PERFIL ------------------
+// DELETE: Eliminar Cuenta
+app.delete("/delete-account/:userId", async (req, res) => {
+    const {userId} = req.params;
+
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({error: "ID de usuario inválido"});
+    }
+
+    try {
+        // Eliminar nodo y relaciones en Neo4j
+        const neo4jSession = driver.session();
+        await neo4jSession.run("MATCH (u:Usuario {id_usuario: $userId}) DETACH DELETE u", {
+            userId: parseInt(userId),
+        });
+        await neo4jSession.close();
+
+        // Eliminar en PostgreSQL
+        const result = await pool.query("DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *", [userId]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({error: "Usuario no encontrado"});
+        }
+
+        res.status(200).json({message: "Usuario eliminado con éxito"});
+    } catch (error) {
+        console.error("Error en DELETE /delete-account:", error);
+        res.status(500).json({error: "Error en el servidor al intentar eliminar al usuario"});
+    }
+});
+
+// 👤 PERFIL DE USUARIO
+
+// GET: Obtener Detalles de Perfil y Estadísticas de Seguimiento
 app.get("/profile/:userId", async (req, res) => {
     const {userId} = req.params;
 
@@ -450,7 +469,7 @@ app.get("/profile/:userId", async (req, res) => {
         return res.status(400).json({error: "ID de usuario inválido"});
     }
 
-    // 🆕 INICIO: Obtener estadísticas de seguimiento de Neo4j
+    // Obtener contadores de seguimiento de Neo4j
     const neo4jSession = driver.session();
     let followersCount = 0;
     let followingCount = 0;
@@ -471,12 +490,10 @@ app.get("/profile/:userId", async (req, res) => {
             followingCount = record.get('siguiendo').toNumber();
         }
     } catch (error) {
-        console.error("❌ Error al obtener follow stats de Neo4j en /profile:", error);
-        // Continuamos con 0 si falla Neo4j para no romper el perfil
+        console.error("Error al obtener follow stats de Neo4j en /profile:", error);
     } finally {
         await neo4jSession.close();
     }
-    // 🆕 FIN: Obtener estadísticas de seguimiento
 
     try {
         const result = await pool.query("SELECT * FROM usuarios WHERE id_usuario = $1", [userId]);
@@ -485,42 +502,39 @@ app.get("/profile/:userId", async (req, res) => {
             return res.status(404).json({error: "Usuario no encontrado"});
         }
        
-        // Generar la URL completa de la imagen si existe
+        // Corregir URL de la imagen de perfil
         let fotoUrl = result.rows[0].foto_perfil;
         if (fotoUrl && !fotoUrl.startsWith('http')) {
-             // Asume que si no es una URL completa, es el nombre del archivo en 'uploads'
              fotoUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(fotoUrl)}`;
         }
 
         const user = {
             ...result.rows[0],
             descripcion: result.rows[0].descripcion || "",
-            foto_perfil: fotoUrl || "", // Usar la URL completa
-            // 💡 Ocultar campos sensibles
+            foto_perfil: fotoUrl || "",
+            // Ocultar campos sensibles
             contrasena: undefined,
             reset_password_token: undefined,
             reset_password_expires: undefined,
         };
 
-        // 🆕 Devolver las métricas de seguimiento junto con el perfil
+        // Devolver métricas de seguimiento y perfil
         res.json({
             user,
             followersCount,
             followingCount,
         });
     } catch (error) {
-        console.error("❌ Error en GET /profile/:userId:", error);
+        console.error("Error en GET /profile/:userId:", error);
         res.status(500).json({error: "Error del servidor"});
     }
 });
 
+// PUT: Actualizar Perfil y Foto
 app.put("/profile/:userId", upload.single('profileImage'), async (req, res) => {
     const { userId } = req.params;
    
-    // Multer procesa el campo de texto 'descripcion'
     const descripcion = req.body.descripcion || "";
-   
-    // Si no se subió un nuevo archivo (req.file), buscamos la URL existente en req.body.foto_perfil
     const existingPhotoUrl = req.body.foto_perfil;
    
     let finalPhotoUrl = existingPhotoUrl;
@@ -530,22 +544,20 @@ app.put("/profile/:userId", upload.single('profileImage'), async (req, res) => {
         return res.status(400).json({error: "ID de usuario inválido"});
     }
 
-    // 1. Manejar la carga de la nueva imagen
+    // Manejo de la imagen nueva
     if (req.file) {
-        // Si hay un archivo (imagen nueva), construimos la URL completa para guardar
         const fileName = req.file.filename;
         finalPhotoUrl = `http://${HOST_IP}:${PORT}/uploads/${fileName}`;
-        console.log(`✅ Nueva foto de perfil subida: ${finalPhotoUrl}`);
+        console.log(`Nueva foto de perfil subida: ${finalPhotoUrl}`);
     }
 
-    // 2. Ejecutar la actualización en PostgreSQL
     try {
         const result = await pool.query(
             `UPDATE usuarios
              SET descripcion = $1, foto_perfil = $2
              WHERE id_usuario = $3
              RETURNING *`,
-            [descripcion, finalPhotoUrl || "", userId] // Guardamos la URL pública o la que se envió
+            [descripcion, finalPhotoUrl || "", userId]
         );
 
         if (result.rows.length === 0) {
@@ -553,7 +565,7 @@ app.put("/profile/:userId", upload.single('profileImage'), async (req, res) => {
             return res.status(404).json({error: "Usuario no encontrado"});
         }
 
-        // 3. Devolver la respuesta con la URL corregida para el frontend
+        // Devolver la respuesta con la URL corregida
         const updatedUser = {
             ...result.rows[0],
             foto_perfil: finalPhotoUrl || "",
@@ -566,50 +578,75 @@ app.put("/profile/:userId", upload.single('profileImage'), async (req, res) => {
         res.json({message: "Perfil actualizado con éxito", user: updatedUser});
     } catch (error) {
         if (req.file) fs.unlinkSync(req.file.path);
-        console.error("❌ Error en PUT /profile/:userId:", error);
+        console.error("Error en PUT /profile/:userId:", error);
         res.status(500).json({error: "Error del servidor al actualizar el perfil."});
     }
 });
 
-// ------------------ PUBLICACIONES ------------------
+// 📣 PUBLICACIONES 
 
-// POST: Crear una publicación con soporte para carga de archivos
+// Obtener contadores de Likes y Comentarios
+const getPostMetrics = async (postId, currentUserId) => {
+    const numericUserId = safeParseInt(currentUserId);
+   
+    try {
+        // Contar Likes
+        const likesResult = await pool.query(
+            'SELECT COUNT(*)::INTEGER FROM likes WHERE post_id = $1',
+            [postId]
+        );
+        const likeCount = likesResult.rows[0].count;
+
+        // Contar Comentarios
+        const commentResult = await pool.query(
+            'SELECT COUNT(*)::INTEGER FROM comentarios WHERE post_id = $1',
+            [postId]
+        );
+        const commentCount = commentResult.rows[0].count;
+
+        // Verificar si el usuario actual ya dio like
+        let isLikedByCurrentUser = false;
+        if (numericUserId) {
+            const likedResult = await pool.query(
+                'SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2',
+                [postId, numericUserId]
+            );
+            isLikedByCurrentUser = likedResult.rows.length > 0;
+        }
+
+        return { likeCount, commentCount, isLikedByCurrentUser };
+    } catch (error) {
+        console.error('Error fetching post metrics:', error);
+        return { likeCount: 0, commentCount: 0, isLikedByCurrentUser: false };
+    }
+};
+
+// POST: Crear una Publicación 
 app.post("/posts/create", upload.single('postImage'), async (req, res) => {
-    // AHORA req.body DEBERÍA TENER LOS DATOS DE TEXTO
-    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
     const userId = safeParseInt(req.body.userId);
     const { content } = req.body;
    
-    // 1. VALIDACIÓN
     if (!userId || !content) {
-        // Si hay un error, intentamos eliminar la imagen temporal si se subió
         if (req.file) fs.unlinkSync(req.file.path);
-       
-        // 💡 MEJORA: Mensaje de error más detallado
         let errorMsg = "Faltan datos requeridos: ";
         if (!userId) {
-            // userId será null si safeParseInt falló (valor no numérico o vacío)
             errorMsg += `[Usuario ID inválido o faltante. Valor recibido: ${req.body.userId}]`;
         }
         if (!content) {
-            // Esto solo es true si el contenido es null o undefined (no si es un string vacío, ya que el cliente lo valida)
             errorMsg += "[Contenido faltante. Valor recibido: " + req.body.content + "]";
         }
        
         return res.status(400).json({ error: errorMsg });
     }
 
-    // 2. OBTENER URL DE LA IMAGEN
     const fileName = req.file ? req.file.filename : null;
 
     let imageUrl = null;
     if (fileName) {
-        // Guardamos la URL completa para el frontend
         imageUrl = `http://${HOST_IP}:${PORT}/uploads/${fileName}`;
         console.log(`✅ URL de imagen generada: ${imageUrl}`);
     }
 
-    // 3. Intentar la inserción en PostgreSQL
     try {
         const sqlQuery = `
             INSERT INTO posts (user_id, content, image_url)
@@ -619,7 +656,6 @@ app.post("/posts/create", upload.single('postImage'), async (req, res) => {
        
         const result = await pool.query(sqlQuery, [userId, content, imageUrl]);
 
-        // 4. Respuesta exitosa
         res.status(201).json({
             message: "Publicación creada con éxito.",
             post: {
@@ -630,10 +666,9 @@ app.post("/posts/create", upload.single('postImage'), async (req, res) => {
         });
 
     } catch (error) {
-        // Si hay un error de DB, intentamos eliminar la imagen temporal
         if (req.file) fs.unlinkSync(req.file.path);
        
-        console.error('❌ Error al insertar la publicación en la BD:', error);
+        console.error('Error al insertar la publicación en la BD:', error);
        
         if (error.code === '23503') {
             return res.status(400).json({ error: "El ID de usuario no existe." });
@@ -642,103 +677,80 @@ app.post("/posts/create", upload.single('postImage'), async (req, res) => {
     }
 });
 
-// --- PUBLICACIONES (LECTURA) ---
-
-// Función auxiliar para obtener contadores de likes y comentarios
-const getPostMetrics = async (postId, currentUserId) => {
-    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
-    const numericUserId = safeParseInt(currentUserId);
-   
-    try {
-        // 1. Contar Likes
-        const likesResult = await pool.query(
-            'SELECT COUNT(*)::INTEGER FROM likes WHERE post_id = $1',
-            [postId]
-        );
-        const likeCount = likesResult.rows[0].count;
-
-        // 2. Contar Comentarios
-        const commentResult = await pool.query(
-            'SELECT COUNT(*)::INTEGER FROM comentarios WHERE post_id = $1',
-            [postId]
-        );
-        const commentCount = commentResult.rows[0].count;
-
-        // 3. Verificar si el usuario actual ya dio like
-        let isLikedByCurrentUser = false;
-        if (numericUserId) {
-            const likedResult = await pool.query(
-                'SELECT 1 FROM likes WHERE post_id = $1 AND user_id = $2',
-                [postId, numericUserId] // Usamos el ID ya convertido y limpio
-            );
-            isLikedByCurrentUser = likedResult.rows.length > 0;
-        }
-
-        return { likeCount, commentCount, isLikedByCurrentUser };
-    } catch (error) {
-        console.error('Error fetching post metrics:', error);
-        // Devolver 0 y false en caso de error para no detener el feed
-        return { likeCount: 0, commentCount: 0, isLikedByCurrentUser: false };
-    }
-};
-
-// GET: Obtener TODAS las publicaciones para el Home Feed (FEED PRINCIPAL)
+// GET: Obtener Feed Principal (incluye compartidos)
 app.get("/posts", async (req, res) => {
-    // 💡 CORRECCIÓN: El userId se pasa para obtener las métricas de like del usuario
     const currentUserId = req.query.userId;
 
     try {
-        // Consulta base para obtener posts con la información del autor
         const sqlQuery = `
             SELECT
                 p.id,
                 p.content,
                 p.image_url AS "imageUrl",
                 p.created_at AS "createdAt",
-                u.id_usuario AS "authorId",
+                p.user_id AS "authorId",
+                p.shared_post_id AS "sharedPostId",
+                COALESCE(p.share_count, 0) AS "shareCount",
                 u.nombre_usuario AS "authorUsername",
-                u.foto_perfil AS "authorProfilePic"
+                u.foto_perfil AS "authorProfilePic",
+                op.content AS "originalContent",
+                op.image_url AS "originalImageUrl",
+                op.created_at AS "originalCreatedAt",
+                op.user_id AS "originalAuthorId",
+                ou.nombre_usuario AS "originalAuthorUsername",
+                ou.foto_perfil AS "originalAuthorProfilePic"
             FROM posts p
             JOIN usuarios u ON p.user_id = u.id_usuario
+            LEFT JOIN posts op ON p.shared_post_id = op.id
+            LEFT JOIN usuarios ou ON op.user_id = ou.id_usuario
             ORDER BY p.created_at DESC;
         `;
        
         const result = await pool.query(sqlQuery);
        
-        // CORRECCIÓN: Mapear para completar URLs de imágenes
         const postsWithMetrics = await Promise.all(result.rows.map(async (post) => {
             const metrics = await getPostMetrics(post.id, currentUserId);
            
-            // Reconstruir la URL de la imagen del Post
+            // Reconstruir URLs de imágenes
             let postImageUrl = post.imageUrl;
             if (postImageUrl && !postImageUrl.startsWith('http')) {
-                // Si solo tenemos el nombre del archivo, lo corregimos
                 postImageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(postImageUrl)}`;
             }
 
-            // Reconstruir la URL de la Foto de Perfil del Autor
             let authorProfilePicUrl = post.authorProfilePic;
             if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
                 authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
             }
 
+            let originalImageUrl = post.originalImageUrl;
+            if (originalImageUrl && !originalImageUrl.startsWith('http')) {
+                originalImageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(originalImageUrl)}`;
+            }
+
+            let originalAuthorProfilePic = post.originalAuthorProfilePic;
+            if (originalAuthorProfilePic && !originalAuthorProfilePic.startsWith('http')) {
+                originalAuthorProfilePic = `http://${HOST_IP}:${PORT}/uploads/${path.basename(originalAuthorProfilePic)}`;
+            }
+
             return {
                 ...post,
                 ...metrics,
-                imageUrl: postImageUrl, // Usar la URL corregida
-                authorProfilePic: authorProfilePicUrl // Usar la URL corregida
+                imageUrl: postImageUrl,
+                authorProfilePic: authorProfilePicUrl,
+                originalImageUrl,
+                originalAuthorProfilePic
             };
         }));
 
         res.status(200).json({ posts: postsWithMetrics });
 
     } catch (error) {
-        console.error("❌ Error al obtener posts del feed:", error);
+        console.error("Error al obtener posts del feed:", error);
         res.status(500).json({ error: "Error interno del servidor al cargar publicaciones." });
     }
 });
 
-// GET: Obtener publicaciones de un usuario específico para el Perfil
+// GET: Obtener Publicaciones de un Usuario (Perfil)
 app.get("/profile/:userId/posts", async (req, res) => {
     const { userId } = req.params;
     const currentUserId = req.query.currentUserId;
@@ -754,56 +766,135 @@ app.get("/profile/:userId/posts", async (req, res) => {
                 p.content,
                 p.image_url AS "imageUrl",
                 p.created_at AS "createdAt",
-                u.id_usuario AS "authorId",
+                p.user_id AS "authorId",
+                p.shared_post_id AS "sharedPostId",
+                COALESCE(p.share_count, 0) AS "shareCount",
                 u.nombre_usuario AS "authorUsername",
-                u.foto_perfil AS "authorProfilePic"
+                u.foto_perfil AS "authorProfilePic",
+                op.content AS "originalContent",
+                op.image_url AS "originalImageUrl",
+                op.created_at AS "originalCreatedAt",
+                op.user_id AS "originalAuthorId",
+                ou.nombre_usuario AS "originalAuthorUsername",
+                ou.foto_perfil AS "originalAuthorProfilePic"
             FROM posts p
             JOIN usuarios u ON p.user_id = u.id_usuario
+            LEFT JOIN posts op ON p.shared_post_id = op.id
+            LEFT JOIN usuarios ou ON op.user_id = ou.id_usuario
             WHERE p.user_id = $1
             ORDER BY p.created_at DESC;
         `;
 
         const result = await pool.query(sqlQuery, [userId]);
        
-        // CORRECCIÓN: Mapear para completar URLs de imágenes
         const postsWithMetrics = await Promise.all(result.rows.map(async (post) => {
             const metrics = await getPostMetrics(post.id, currentUserId);
            
-            // Reconstruir la URL de la imagen del Post
+            // Reconstruir URLs de imágenes y perfil
             let postImageUrl = post.imageUrl;
             if (postImageUrl && !postImageUrl.startsWith('http')) {
                 postImageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(postImageUrl)}`;
             }
 
-            // Reconstruir la URL de la Foto de Perfil del Autor
             let authorProfilePicUrl = post.authorProfilePic;
             if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
                 authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
             }
 
+            let originalImageUrl = post.originalImageUrl;
+            if (originalImageUrl && !originalImageUrl.startsWith('http')) {
+                originalImageUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(originalImageUrl)}`;
+            }
+
+            let originalAuthorProfilePic = post.originalAuthorProfilePic;
+            if (originalAuthorProfilePic && !originalAuthorProfilePic.startsWith('http')) {
+                originalAuthorProfilePic = `http://${HOST_IP}:${PORT}/uploads/${path.basename(originalAuthorProfilePic)}`;
+            }
+
             return {
                 ...post,
                 ...metrics,
-                imageUrl: postImageUrl, // Usar la URL corregida
-                authorProfilePic: authorProfilePicUrl // Usar la URL corregida
+                imageUrl: postImageUrl,
+                authorProfilePic: authorProfilePicUrl,
+                originalImageUrl,
+                originalAuthorProfilePic
             };
         }));
 
         res.status(200).json({ posts: postsWithMetrics });
 
     } catch (error) {
-        console.error(`❌ Error al obtener posts del usuario ${userId}:`, error);
+        console.error(`Error al obtener posts del usuario ${userId}:`, error);
         res.status(500).json({ error: "Error interno del servidor al cargar publicaciones del perfil." });
     }
 });
 
-// ------------------ LIKES Y COMENTARIOS (NUEVAS RUTAS) ------------------
+// DELETE: Eliminar Publicación (por el Autor)
+app.delete("/posts/:postId", async (req, res) => {
+    const { postId } = req.params;
+    const userId = safeParseInt(req.body.userId);
 
-// 1. POST: Dar "Me Gusta"
+    if (!postId || isNaN(postId)) {
+        return res.status(400).json({ error: "ID de publicación inválido." });
+    }
+
+    if (!userId) {
+        return res.status(400).json({ error: "Usuario no autorizado." });
+    }
+
+    try {
+        // Verificar que el post existe y pertenece al usuario
+        const checkQuery = `
+            SELECT user_id, image_url 
+            FROM posts 
+            WHERE id = $1
+        `;
+        const checkResult = await pool.query(checkQuery, [postId]);
+
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ error: "Publicación no encontrada." });
+        }
+
+        const post = checkResult.rows[0];
+
+        if (parseInt(post.user_id) !== userId) {
+            return res.status(403).json({ error: "No tienes permiso para eliminar esta publicación." });
+        }
+
+        // Eliminar la imagen del servidor
+        if (post.image_url) {
+            const imagePath = path.join(uploadDir, path.basename(post.image_url));
+            if (fs.existsSync(imagePath)) {
+                try {
+                    fs.unlinkSync(imagePath);
+                    console.log(`Imagen eliminada: ${imagePath}`);
+                } catch (err) {
+                    console.error("Error al eliminar imagen:", err);
+                }
+            }
+        }
+
+        // Eliminar el post 
+        const deleteQuery = `
+            DELETE FROM posts 
+            WHERE id = $1
+        `;
+        await pool.query(deleteQuery, [postId]);
+
+        console.log(`Publicación ${postId} eliminada por usuario ${userId}`);
+        res.status(200).json({ message: "Publicación eliminada con éxito." });
+
+    } catch (error) {
+        console.error("Error al eliminar publicación:", error);
+        res.status(500).json({ error: "Error interno del servidor al eliminar la publicación." });
+    }
+});
+
+// 👍 LIKES Y COMENTARIOS
+
+// POST: Dar "Me Gusta"
 app.post("/posts/:postId/like", async (req, res) => {
     const { postId } = req.params;
-   
-    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
     const userId = safeParseInt(req.body.userId);
 
     if (!userId) {
@@ -827,16 +918,14 @@ app.post("/posts/:postId/like", async (req, res) => {
         res.status(201).json({ message: "Like registrado con éxito." });
 
     } catch (error) {
-        console.error('❌ Error al registrar like:', error);
+        console.error('Error al registrar like:', error);
         res.status(500).json({ error: "Error interno del servidor al registrar like." });
     }
 });
 
-// 2. DELETE: Quitar "Me Gusta"
+// DELETE: Quitar "Me Gusta"
 app.delete("/posts/:postId/like", async (req, res) => {
     const { postId } = req.params;
-   
-    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
     const userId = safeParseInt(req.body.userId);
 
     if (!userId) {
@@ -858,60 +947,15 @@ app.delete("/posts/:postId/like", async (req, res) => {
         res.status(200).json({ message: "Like eliminado con éxito." });
 
     } catch (error) {
-        console.error('❌ Error al eliminar like:', error);
+        console.error('Error al eliminar like:', error);
         res.status(500).json({ error: "Error interno del servidor al eliminar like." });
     }
 });
 
-// 3. GET: Obtener Comentarios del Post
-app.get("/posts/:postId/comments", async (req, res) => {
-    const { postId } = req.params;
-   
-    try {
-        const sqlQuery = `
-            SELECT
-                c.id AS id,
-                c.content AS content,
-                c.created_at AS "createdAt",
-                u.nombre_usuario AS "authorUsername",
-                u.foto_perfil AS "authorProfilePic"
-            FROM
-                comentarios c
-            JOIN
-                usuarios u ON c.user_id = u.id_usuario
-            WHERE
-                c.post_id = $1  
-            ORDER BY
-                c.created_at DESC;
-        `;
-       
-        const result = await pool.query(sqlQuery, [postId]);
-
-        // Mapear los resultados para corregir la URL de la foto de perfil del autor
-        const comments = result.rows.map(comment => {
-            let authorProfilePicUrl = comment.authorProfilePic;
-            if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
-                authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
-            }
-            return {
-                ...comment,
-                authorProfilePic: authorProfilePicUrl
-            };
-        });
-
-        res.status(200).json({ comments });
-
-    } catch (error) {
-        console.error('❌ Error al obtener comentarios:', error);
-        res.status(500).json({ error: 'Error interno del servidor al obtener comentarios.' });
-    }
-});
-
-// 4. POST: Crear un nuevo Comentario
+// POST: Crear un nuevo Comentario
 app.post("/posts/:postId/comments", async (req, res) => {
     const { postId } = req.params;
    
-    // 💡 CORRECCIÓN: Usar safeParseInt para limpiar el userId
     const userId = safeParseInt(req.body.userId);
     const { content } = req.body;
 
@@ -930,7 +974,7 @@ app.post("/posts/:postId/comments", async (req, res) => {
         const insertResult = await pool.query(insertQuery, [postId, userId, content]);
         const newCommentId = insertResult.rows[0].id;
 
-        // 2. Obtener la información completa del comentario para devolverla al frontend
+        // 2. Obtener información completa
         const fetchQuery = `
             SELECT
                 c.id,
@@ -945,14 +989,13 @@ app.post("/posts/:postId/comments", async (req, res) => {
        
         const fetchResult = await pool.query(fetchQuery, [newCommentId]);
        
-        // 3. Corregir la URL de la foto de perfil antes de devolver el comentario
+        // 3. Corregir URL de perfil
         let newComment = fetchResult.rows[0];
         let authorProfilePicUrl = newComment.authorProfilePic;
         if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
             newComment.authorProfilePic = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
         }
 
-        // Devolver el nuevo comentario insertado (tal como espera CommentsScreen.js)
         res.status(201).json({
             message: "Comentario publicado con éxito.",
             newComment: newComment
@@ -964,101 +1007,382 @@ app.post("/posts/:postId/comments", async (req, res) => {
     }
 });
 
-// ------------------ ELIMINAR PUBLICACIÓN ------------------
-app.delete("/posts/:postId", async (req, res) => {
+// COMPARTIR Y REPORTAR
+
+// POST: Compartir una Publicación
+app.post("/posts/:postId/share", async (req, res) => {
     const { postId } = req.params;
     const userId = safeParseInt(req.body.userId);
-
-    if (!postId || isNaN(postId)) {
-        return res.status(400).json({ error: "ID de publicación inválido." });
-    }
+    const { comment } = req.body;
 
     if (!userId) {
         return res.status(400).json({ error: "Usuario no autorizado." });
     }
 
-    try {
-        // 1. Verificar que el post existe y pertenece al usuario
-        const checkQuery = `
-            SELECT user_id, image_url 
-            FROM posts 
-            WHERE id = $1
-        `;
-        const checkResult = await pool.query(checkQuery, [postId]);
+    if (!postId || isNaN(postId)) {
+        return res.status(400).json({ error: "ID de publicación inválido." });
+    }
 
-        if (checkResult.rows.length === 0) {
+    try {
+        // 1. Verificar post original
+        const originalPostQuery = `
+            SELECT 
+                p.id,
+                p.content,
+                p.image_url,
+                p.user_id,
+                p.shared_post_id
+            FROM posts p
+            WHERE p.id = $1
+        `;
+        const originalPostResult = await pool.query(originalPostQuery, [postId]);
+
+        if (originalPostResult.rows.length === 0) {
             return res.status(404).json({ error: "Publicación no encontrada." });
         }
 
-        const post = checkResult.rows[0];
+        const originalPost = originalPostResult.rows[0];
+        
+        // 2. Determinar ID raíz
+        const rootPostId = originalPost.shared_post_id || originalPost.id;
 
-        // 2. Verificar que el usuario es el dueño del post
-        if (parseInt(post.user_id) !== userId) {
-            return res.status(403).json({ error: "No tienes permiso para eliminar esta publicación." });
+        // 3. Chequeo de auto-compartido 
+        if (parseInt(originalPost.user_id) === userId && !originalPost.shared_post_id) {
+            return res.status(400).json({ error: "No puedes compartir tu propia publicación." });
         }
 
-        // 3. Eliminar la imagen del servidor si existe
-        if (post.image_url) {
-            const imagePath = path.join(uploadDir, path.basename(post.image_url));
-            if (fs.existsSync(imagePath)) {
-                try {
-                    fs.unlinkSync(imagePath);
-                    console.log(`✅ Imagen eliminada: ${imagePath}`);
-                } catch (err) {
-                    console.error("⚠️ Error al eliminar imagen:", err);
-                }
-            }
+        // 4. Chequeo de duplicado
+        const duplicateCheck = await pool.query(
+            'SELECT id FROM posts WHERE user_id = $1 AND shared_post_id = $2',
+            [userId, rootPostId]
+        );
+
+        if (duplicateCheck.rows.length > 0) {
+            return res.status(400).json({ error: "Ya has compartido esta publicación." });
         }
 
-        // 4. Eliminar el post de la base de datos
-        // Gracias a ON DELETE CASCADE, los likes y comentarios se eliminan automáticamente
-        const deleteQuery = `
-            DELETE FROM posts 
-            WHERE id = $1
+        // 5. Crear la publicación compartida
+        const shareContent = comment && comment.trim() 
+            ? comment.trim() 
+            : null;
+
+        const insertQuery = `
+            INSERT INTO posts (user_id, content, image_url, shared_post_id, created_at)
+            VALUES ($1, $2, $3, $4, NOW())
+            RETURNING id, created_at
         `;
-        await pool.query(deleteQuery, [postId]);
 
-        console.log(`✅ Publicación ${postId} eliminada por usuario ${userId}`);
-        res.status(200).json({ message: "Publicación eliminada con éxito." });
+        const insertResult = await pool.query(insertQuery, [
+            userId,
+            shareContent,
+            originalPost.image_url,
+            rootPostId
+        ]);
+
+        // 6. Incrementar contador en el post original
+        await pool.query(
+            'UPDATE posts SET share_count = share_count + 1 WHERE id = $1',
+            [rootPostId]
+        );
+
+        // 7. Notificación al autor original
+        const originalAuthorId = await pool.query(
+            'SELECT user_id FROM posts WHERE id = $1',
+            [rootPostId]
+        );
+
+        if (originalAuthorId.rows.length > 0 && 
+            parseInt(originalAuthorId.rows[0].user_id) !== userId) {
+            
+            const notificationMessage = 'Un usuario compartió tu publicación';
+            
+            await pool.query(
+                `INSERT INTO notificaciones (user_id, type, message, post_id, is_read, created_at)
+                 VALUES ($1, 'post_shared', $2, $3, FALSE, NOW())`,
+                [originalAuthorId.rows[0].user_id, notificationMessage, rootPostId]
+            );
+        }
+
+        console.log(`Usuario ${userId} compartió publicación ${rootPostId}`);
+        
+        res.status(200).json({
+            message: "Publicación compartida exitosamente",
+            sharedPostId: insertResult.rows[0].id
+        });
 
     } catch (error) {
-        console.error("❌ Error al eliminar publicación:", error);
-        res.status(500).json({ error: "Error interno del servidor al eliminar la publicación." });
+        console.error("❌ Error al compartir publicación:", error);
+        res.status(500).json({ error: "Error interno del servidor al compartir la publicación." });
     }
 });
 
-// ------------------ ELIMINAR CUENTA ------------------
-app.delete("/delete-account/:userId", async (req, res) => {
-    const {userId} = req.params;
+// POST: Reportar una Publicación (para usuario)
+app.post('/posts/:postId/report', async (req, res) => {
+    const { postId } = req.params;
+    const reporterId = safeParseInt(req.body.reporterId);
 
-    if (!userId || isNaN(userId)) {
-        return res.status(400).json({error: "ID de usuario inválido"});
+    if (!reporterId) {
+        return res.status(400).json({ error: 'ID de usuario inválido' });
     }
 
     try {
-        // Eliminar en Neo4j (Grafos)
-        const neo4jSession = driver.session();
-        await neo4jSession.run("MATCH (u:Usuario {id_usuario: $userId}) DETACH DELETE u", {
-            userId: parseInt(userId),
-        });
-        await neo4jSession.close();
-
-        // Eliminar en PostgreSQL. Gracias a ON DELETE CASCADE,
-        // las publicaciones, likes y comentarios del usuario se eliminan automáticamente.
-        const result = await pool.query("DELETE FROM usuarios WHERE id_usuario = $1 RETURNING *", [userId]);
-
-        if (result.rowCount === 0) {
-            return res.status(404).json({error: "Usuario no encontrado"});
+        // Verificar que la publicación existe
+        const postCheck = await pool.query('SELECT id FROM posts WHERE id = $1', [postId]);
+        if (postCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Publicación no encontrada' });
         }
 
-        res.status(200).json({message: "Usuario eliminado con éxito"});
+        // Verificar que no haya reportado ya
+        const existingReport = await pool.query(
+            'SELECT id_reporte FROM reportes WHERE post_id = $1 AND reporter_id = $2',
+            [postId, reporterId]
+        );
+
+        if (existingReport.rows.length > 0) {
+            return res.status(400).json({ error: 'Ya has reportado esta publicación' });
+        }
+
+        // Insertar el reporte
+        await pool.query(
+            `INSERT INTO reportes (post_id, reporter_id, estado, created_at) 
+             VALUES ($1, $2, 'pendiente', NOW())`,
+            [postId, reporterId]
+        );
+
+        console.log(`Usuario ${reporterId} reportó publicación ${postId}`);
+        res.status(201).json({ message: 'Reporte enviado exitosamente' });
     } catch (error) {
-        console.error("❌ Error en DELETE /delete-account:", error);
-        res.status(500).json({error: "Error en el servidor al intentar eliminar al usuario"});
+        console.error('Error al reportar publicación:', error);
+        
+        if (error.code === '42P01') {
+            return res.status(503).json({ 
+                error: 'El sistema de reportes no está configurado. Contacta al administrador.' 
+            });
+        }
+        
+        res.status(500).json({ error: 'Error al enviar el reporte' });
     }
 });
 
-// ------------------ BÚSQUEDA POSTGRESQL ------------------
+// GESTIÓN DE SEGUIMIENTO DE USUARIOS
+
+// POST: Seguir a un Usuario
+app.post("/follow/:followedId", async (req, res) => {
+    const { followedId } = req.params;
+    const followerId = safeParseInt(req.body.followerId);
+
+    if (!followerId || !followedId) {
+        return res.status(400).json({ error: "IDs de usuario inválidos." });
+    }
+
+    const session = driver.session();
+   
+    try {
+        // Crear la relación SIGUE_A
+        await session.run(
+            `MATCH (follower:Usuario {id_usuario: $followerId})
+             MATCH (followed:Usuario {id_usuario: $followedId})
+             MERGE (follower)-[:SIGUE_A]->(followed)
+             RETURN follower, followed`,
+            {
+                followerId: parseInt(followerId),
+                followedId: parseInt(followedId)
+            }
+        );
+       
+        console.log(`Usuario ${followerId} ahora sigue a ${followedId}`);
+        res.status(200).json({ message: "Usuario seguido exitosamente" });
+       
+    } catch (error) {
+        console.error("Error al seguir usuario en Neo4j:", error);
+        res.status(500).json({ error: "Error al seguir usuario" });
+    } finally {
+        await session.close();
+    }
+});
+
+// DELETE: Dejar de Seguir a un Usuario
+app.delete("/unfollow/:followedId", async (req, res) => {
+    const { followedId } = req.params;
+    const followerId = safeParseInt(req.body.followerId);
+
+    if (!followerId || !followedId) {
+        return res.status(400).json({ error: "IDs de usuario inválidos." });
+    }
+
+    const session = driver.session();
+   
+    try {
+        // Eliminar la relación SIGUE_A
+        const result = await session.run(
+            `MATCH (follower:Usuario {id_usuario: $followerId})-[r:SIGUE_A]->(followed:Usuario {id_usuario: $followedId})
+             DELETE r
+             RETURN count(r) as deleted`,
+            {
+                followerId: parseInt(followerId),
+                followedId: parseInt(followedId)
+            }
+        );
+       
+        const deletedCount = result.records[0]?.get('deleted').toNumber() || 0;
+       
+        if (deletedCount === 0) {
+            return res.status(404).json({ error: "No se encontró la relación de seguimiento." });
+        }
+       
+        console.log(`Usuario ${followerId} dejó de seguir a ${followedId}`);
+        res.status(200).json({ message: "Dejaste de seguir al usuario" });
+       
+    } catch (error) {
+        console.error("Error al dejar de seguir en Neo4j:", error);
+        res.status(500).json({ error: "Error al dejar de seguir" });
+    } finally {
+        await session.close();
+    }
+});
+
+// GET: Verificar si un usuario sigue a otro
+app.get("/isFollowing/:followedId", async (req, res) => {
+    const { followedId } = req.params;
+    const followerId = safeParseInt(req.query.followerId);
+
+    if (!followerId || !followedId) {
+        return res.status(400).json({ error: "IDs de usuario inválidos." });
+    }
+
+    const session = driver.session();
+   
+    try {
+        const result = await session.run(
+            `MATCH (follower:Usuario {id_usuario: $followerId})
+             OPTIONAL MATCH (follower)-[r:SIGUE_A]->(followed:Usuario {id_usuario: $followedId})
+             RETURN r IS NOT NULL AS isFollowing`,
+            {
+                followerId: parseInt(followerId),
+                followedId: parseInt(followedId)
+            }
+        );
+       
+        const isFollowing = result.records[0]?.get('isFollowing') || false;
+       
+        console.log(`[CHECK FOLLOW] Usuario ${followerId} ${isFollowing ? 'SÍ' : 'NO'} sigue a ${followedId}`);
+        res.status(200).json({ isFollowing });
+       
+    } catch (error) {
+        console.error("Error al verificar seguimiento en Neo4j:", error);
+        res.status(500).json({ error: "Error al verificar seguimiento" });
+    } finally {
+        await session.close();
+    }
+});
+
+// GET: Obtener Estadísticas de Seguimiento (Conteo)
+app.get("/profile/:userId/followStats", async (req, res) => {
+    const { userId } = req.params;
+
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({ error: "ID de usuario inválido" });
+    }
+
+    const session = driver.session();
+   
+    try {
+        const result = await session.run(
+            `MATCH (u:Usuario {id_usuario: $userId})
+             OPTIONAL MATCH (u)<-[:SIGUE_A]-(follower)
+             WITH u, count(DISTINCT follower) as seguidores
+             OPTIONAL MATCH (u)-[:SIGUE_A]->(followed)
+             RETURN seguidores, count(DISTINCT followed) as siguiendo`,
+            { userId: parseInt(userId) }
+        );
+       
+        const record = result.records[0];
+        const stats = {
+            seguidores: record?.get('seguidores').toNumber() || 0,
+            siguiendo: record?.get('siguiendo').toNumber() || 0
+        };
+       
+        res.status(200).json(stats);
+       
+    } catch (error) {
+        console.error("Error al obtener estadísticas de seguimiento:", error);
+        res.status(500).json({ error: "Error al obtener estadísticas" });
+    } finally {
+        await session.close();
+    }
+});
+
+// GET: Obtener Lista de Seguidores
+app.get("/users/:userId/followers", async (req, res) => {
+    const { userId } = req.params;
+    const currentUserId = req.query.currentUserId;
+
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({ error: "ID de usuario inválido." });
+    }
+
+    const session = driver.session();
+    try {
+        // 1. Obtener IDs de seguidores desde Neo4j
+        const cypher = `
+            MATCH (follower:Usuario)-[:SIGUE_A]->(u:Usuario {id_usuario: $userId})
+            RETURN collect(follower.id_usuario) AS followerIds
+        `;
+       
+        const result = await session.run(cypher, { userId: parseInt(userId) });
+       
+        const followerIds = result.records[0]?.get('followerIds') || [];
+       
+        // 2. Obtener detalles de PostgreSQL y estado de seguimiento
+        const followersDetails = await fetchUsersDetails(followerIds, currentUserId);
+
+        res.status(200).json({ followers: followersDetails });
+
+    } catch (error) {
+        console.error("Error al obtener lista de seguidores:", error);
+        res.status(500).json({ error: "Error en el servidor al cargar la lista de seguidores." });
+    } finally {
+        await session.close();
+    }
+});
+
+// GET: Obtener Lista de Seguidos 
+app.get("/users/:userId/following", async (req, res) => {
+    const { userId } = req.params;
+    const currentUserId = req.query.currentUserId;
+
+    if (!userId || isNaN(userId)) {
+        return res.status(400).json({ error: "ID de usuario inválido." });
+    }
+
+    const session = driver.session();
+    try {
+        // 1. Obtener IDs de seguidos desde Neo4j
+        const cypher = `
+            MATCH (u:Usuario {id_usuario: $userId})-[:SIGUE_A]->(followed:Usuario)
+            RETURN collect(followed.id_usuario) AS followedIds
+        `;
+       
+        const result = await session.run(cypher, { userId: parseInt(userId) });
+       
+        const followedIds = result.records[0]?.get('followedIds') || [];
+       
+        // 2. Obtener detalles de PostgreSQL y estado de seguimiento
+        const followingDetails = await fetchUsersDetails(followedIds, currentUserId);
+
+        res.status(200).json({ following: followingDetails });
+
+    } catch (error) {
+        console.error("Error al obtener lista de seguidos:", error);
+        res.status(500).json({ error: "Error en el servidor al cargar la lista de seguidos." });
+    } finally {
+        await session.close();
+    }
+});
+
+// BÚSQUEDA GENERAL
+
+// GET: Búsqueda Unificada (Ligas, Equipos, Jugadores, Usuarios)
 app.get("/buscar", async (req, res) => {
     const termino = req.query.q || "";
     if (termino.length < 1) {
@@ -1132,7 +1456,7 @@ app.get("/buscar", async (req, res) => {
             foto: null
         }));
 
-        // 4. BÚSQUEDA DE USUARIOS
+        // 4. BÚSQUEDA DE USUARIOS (EN EL BUSCADOR)
         const usuariosQuery = `
             SELECT
                 id_usuario,
@@ -1164,236 +1488,14 @@ app.get("/buscar", async (req, res) => {
         res.json({ ligas, equipos, jugadores, usuarios });
 
     } catch (error) {
-        console.error("❌ Error en búsqueda PostgreSQL:", error);
+        console.error("Error en búsqueda PostgreSQL:", error);
         res.status(500).json({ error: "Error en el servidor al realizar búsqueda" });
     }
 });
 
-// ------------------ OBTENER LISTAS DE SEGUIMIENTO (SEGUIDORES/SEGUIDOS) ------------------
+// BUSCADOR CON LOS DETALLES DE LIGAS, EQUIPOS Y JUGADORES
 
-// GET: Obtener la lista de seguidores de un usuario (Followers)
-app.get("/users/:userId/followers", async (req, res) => {
-    const { userId } = req.params;
-    const currentUserId = req.query.currentUserId;
-
-    if (!userId || isNaN(userId)) {
-        return res.status(400).json({ error: "ID de usuario inválido." });
-    }
-
-    const session = driver.session();
-    try {
-        // 1. Obtener IDs de usuarios que siguen al :userId (relación entrante)
-        const cypher = `
-            MATCH (follower:Usuario)-[:SIGUE_A]->(u:Usuario {id_usuario: $userId})
-            RETURN collect(follower.id_usuario) AS followerIds
-        `;
-       
-        const result = await session.run(cypher, { userId: parseInt(userId) });
-       
-        const followerIds = result.records[0]?.get('followerIds') || [];
-       
-        // 2. Obtener detalles de perfil de PostgreSQL y el estado de seguimiento
-        // ✅ Pasamos currentUserId para que fetchUsersDetails verifique si currentUserId sigue a followerIds
-        const followersDetails = await fetchUsersDetails(followerIds, currentUserId);
-
-        res.status(200).json({ followers: followersDetails });
-
-    } catch (error) {
-        console.error("❌ Error al obtener lista de seguidores:", error);
-        res.status(500).json({ error: "Error en el servidor al cargar la lista de seguidores." });
-    } finally {
-        await session.close();
-    }
-});
-
-// GET: Obtener la lista de seguidos de un usuario (Following)
-app.get("/users/:userId/following", async (req, res) => {
-    const { userId } = req.params;
-    const currentUserId = req.query.currentUserId;
-
-    if (!userId || isNaN(userId)) {
-        return res.status(400).json({ error: "ID de usuario inválido." });
-    }
-
-    const session = driver.session();
-    try {
-        // 1. Obtener IDs de usuarios que el :userId sigue (relación saliente)
-        const cypher = `
-            MATCH (u:Usuario {id_usuario: $userId})-[:SIGUE_A]->(followed:Usuario)
-            RETURN collect(followed.id_usuario) AS followedIds
-        `;
-       
-        const result = await session.run(cypher, { userId: parseInt(userId) });
-       
-        const followedIds = result.records[0]?.get('followedIds') || [];
-       
-        // 2. Obtener detalles de perfil de PostgreSQL y el estado de seguimiento
-        // ✅ Pasamos currentUserId para que fetchUsersDetails verifique si currentUserId sigue a followedIds
-        const followingDetails = await fetchUsersDetails(followedIds, currentUserId);
-
-        res.status(200).json({ following: followingDetails });
-
-    } catch (error) {
-        console.error("❌ Error al obtener lista de seguidos:", error);
-        res.status(500).json({ error: "Error en el servidor al cargar la lista de seguidos." });
-    } finally {
-        await session.close();
-    }
-});
-
-// ------------------ SEGUIMIENTO DE USUARIOS (NEO4J) ------------------
-
-// POST: Seguir a un usuario
-app.post("/follow/:followedId", async (req, res) => {
-    const { followedId } = req.params;
-    const followerId = safeParseInt(req.body.followerId);
-
-    console.log(`[FOLLOW] Intento de seguir: Follower ${followerId} -> Followed ${followedId}`);
-
-    if (!followerId || !followedId) {
-        return res.status(400).json({ error: "IDs de usuario inválidos." });
-    }
-
-    const session = driver.session();
-   
-    try {
-        // Crear la relación SIGUE_A en Neo4j
-        await session.run(
-            `MATCH (follower:Usuario {id_usuario: $followerId})
-             MATCH (followed:Usuario {id_usuario: $followedId})
-             MERGE (follower)-[:SIGUE_A]->(followed)
-             RETURN follower, followed`,
-            {
-                followerId: parseInt(followerId),
-                followedId: parseInt(followedId)
-            }
-        );
-       
-        console.log(`✅ Usuario ${followerId} ahora sigue a ${followedId}`);
-        res.status(200).json({ message: "Usuario seguido exitosamente" });
-       
-    } catch (error) {
-        console.error("❌ Error al seguir usuario en Neo4j:", error);
-        res.status(500).json({ error: "Error al seguir usuario" });
-    } finally {
-        await session.close();
-    }
-});
-
-// DELETE: Dejar de seguir a un usuario
-app.delete("/unfollow/:followedId", async (req, res) => {
-    const { followedId } = req.params;
-    const followerId = safeParseInt(req.body.followerId);
-
-    console.log(`[UNFOLLOW] Intento de dejar de seguir: Follower ${followerId} -> Followed ${followedId}`);
-
-    if (!followerId || !followedId) {
-        return res.status(400).json({ error: "IDs de usuario inválidos." });
-    }
-
-    const session = driver.session();
-   
-    try {
-        // Eliminar la relación SIGUE_A
-        const result = await session.run(
-            `MATCH (follower:Usuario {id_usuario: $followerId})-[r:SIGUE_A]->(followed:Usuario {id_usuario: $followedId})
-             DELETE r
-             RETURN count(r) as deleted`,
-            {
-                followerId: parseInt(followerId),
-                followedId: parseInt(followedId)
-            }
-        );
-       
-        const deletedCount = result.records[0]?.get('deleted').toNumber() || 0;
-       
-        if (deletedCount === 0) {
-            return res.status(404).json({ error: "No se encontró la relación de seguimiento." });
-        }
-       
-        console.log(`✅ Usuario ${followerId} dejó de seguir a ${followedId}`);
-        res.status(200).json({ message: "Dejaste de seguir al usuario" });
-       
-    } catch (error) {
-        console.error("❌ Error al dejar de seguir en Neo4j:", error);
-        res.status(500).json({ error: "Error al dejar de seguir" });
-    } finally {
-        await session.close();
-    }
-});
-
-// GET: Verificar si un usuario sigue a otro
-app.get("/isFollowing/:followedId", async (req, res) => {
-    const { followedId } = req.params;
-    const followerId = safeParseInt(req.query.followerId);
-
-    if (!followerId || !followedId) {
-        return res.status(400).json({ error: "IDs de usuario inválidos." });
-    }
-
-    const session = driver.session();
-   
-    try {
-        const result = await session.run(
-            `MATCH (follower:Usuario {id_usuario: $followerId})
-             OPTIONAL MATCH (follower)-[r:SIGUE_A]->(followed:Usuario {id_usuario: $followedId})
-             RETURN r IS NOT NULL AS isFollowing`,
-            {
-                followerId: parseInt(followerId),
-                followedId: parseInt(followedId)
-            }
-        );
-       
-        const isFollowing = result.records[0]?.get('isFollowing') || false;
-       
-        console.log(`[CHECK FOLLOW] Usuario ${followerId} ${isFollowing ? 'SÍ' : 'NO'} sigue a ${followedId}`);
-        res.status(200).json({ isFollowing });
-       
-    } catch (error) {
-        console.error("❌ Error al verificar seguimiento en Neo4j:", error);
-        res.status(500).json({ error: "Error al verificar seguimiento" });
-    } finally {
-        await session.close();
-    }
-});
-
-// GET: Obtener estadísticas de seguimiento (seguidores y seguidos)
-app.get("/profile/:userId/followStats", async (req, res) => {
-    const { userId } = req.params;
-
-    if (!userId || isNaN(userId)) {
-        return res.status(400).json({ error: "ID de usuario inválido" });
-    }
-
-    const session = driver.session();
-   
-    try {
-        const result = await session.run(
-            `MATCH (u:Usuario {id_usuario: $userId})
-             OPTIONAL MATCH (u)<-[:SIGUE_A]-(follower)
-             WITH u, count(DISTINCT follower) as seguidores
-             OPTIONAL MATCH (u)-[:SIGUE_A]->(followed)
-             RETURN seguidores, count(DISTINCT followed) as siguiendo`,
-            { userId: parseInt(userId) }
-        );
-       
-        const record = result.records[0];
-        const stats = {
-            seguidores: record?.get('seguidores').toNumber() || 0,
-            siguiendo: record?.get('siguiendo').toNumber() || 0
-        };
-       
-        res.status(200).json(stats);
-       
-    } catch (error) {
-        console.error("❌ Error al obtener estadísticas de seguimiento:", error);
-        res.status(500).json({ error: "Error al obtener estadísticas" });
-    } finally {
-        await session.close();
-    }
-});
-
-// ------------------ DETALLE DE LIGA ------------------
+// GET: Detalle de Liga y lista de Equipos
 app.get("/liga/:ligaId", async (req, res) => {
     const { ligaId } = req.params;
    
@@ -1445,12 +1547,44 @@ app.get("/liga/:ligaId", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error en /liga/:ligaId:", error);
+        console.error(" Error en /liga/:ligaId:", error);
         res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// ------------------ DETALLE DE EQUIPO ------------------
+// GET: Detalles Totales de Liga
+app.get("/liga/:ligaId/stats", async (req, res) => {
+    const { ligaId } = req.params;
+   
+    try {
+        const statsQuery = `
+            SELECT 
+                COUNT(DISTINCT e.id) as total_equipos,
+                COUNT(DISTINCT j.id) as total_jugadores,
+                SUM(j.goles) as total_goles,
+                SUM(j.partidos_jugados) as total_partidos
+            FROM ligas l
+            LEFT JOIN equipos e ON e.liga_id = l.id
+            LEFT JOIN jugadores j ON j.liga_id = l.id
+            WHERE l.id = $1
+            GROUP BY l.id
+        `;
+        const statsResult = await pool.query(statsQuery, [ligaId]);
+        
+        res.json(statsResult.rows[0] || {
+            total_equipos: 0,
+            total_jugadores: 0,
+            total_goles: 0,
+            total_partidos: 0
+        });
+
+    } catch (error) {
+        console.error("Error en /liga/:ligaId/stats:", error);
+        res.status(500).json({ error: "Error al obtener estadísticas" });
+    }
+});
+
+// GET: Detalle de Equipo y lista de Jugadores
 app.get("/equipo/:equipoId", async (req, res) => {
     const { equipoId } = req.params;
    
@@ -1519,12 +1653,12 @@ app.get("/equipo/:equipoId", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error en /equipo/:equipoId:", error);
+        console.error("Error en /equipo/:equipoId:", error);
         res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// ------------------ DETALLE DE JUGADOR ------------------
+// GET: Detalle Completo de Jugador
 app.get("/jugador/:jugadorId", async (req, res) => {
     const { jugadorId } = req.params;
    
@@ -1590,50 +1724,14 @@ app.get("/jugador/:jugadorId", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("❌ Error en /jugador/:jugadorId:", error);
+        console.error("Error en /jugador/:jugadorId:", error);
         res.status(500).json({ error: "Error interno del servidor" });
     }
 });
 
-// ------------------ ESTADÍSTICAS DE LIGA ------------------
-app.get("/liga/:ligaId/stats", async (req, res) => {
-    const { ligaId } = req.params;
-   
-    try {
-        const statsQuery = `
-            SELECT 
-                COUNT(DISTINCT e.id) as total_equipos,
-                COUNT(DISTINCT j.id) as total_jugadores,
-                SUM(j.goles) as total_goles,
-                SUM(j.partidos_jugados) as total_partidos
-            FROM ligas l
-            LEFT JOIN equipos e ON e.liga_id = l.id
-            LEFT JOIN jugadores j ON j.liga_id = l.id
-            WHERE l.id = $1
-            GROUP BY l.id
-        `;
-        const statsResult = await pool.query(statsQuery, [ligaId]);
-        
-        res.json(statsResult.rows[0] || {
-            total_equipos: 0,
-            total_jugadores: 0,
-            total_goles: 0,
-            total_partidos: 0
-        });
+// 👑 ENDPOINTS DE ADMINISTRACIÓN
 
-    } catch (error) {
-        console.error("❌ Error en /liga/:ligaId/stats:", error);
-        res.status(500).json({ error: "Error al obtener estadísticas" });
-    }
-});
-
-// ============================================
-// 📍 ENDPOINTS DE ADMINISTRACIÓN
-// ============================================
-// AGREGAR ESTA SECCIÓN COMPLETA DESPUÉS DEL ENDPOINT /jugador/:jugadorId
-// (línea 1089 aproximadamente) Y ANTES DE app.listen (línea 1091)
-
-// Función auxiliar: Verificar si un usuario es admin
+// Verificar Rol de Administrador
 const isAdmin = async (userId) => {
     try {
         const result = await pool.query(
@@ -1642,15 +1740,14 @@ const isAdmin = async (userId) => {
         );
         return result.rows.length > 0 && result.rows[0].rol_id === 2;
     } catch (error) {
-        console.error("❌ Error al verificar rol de admin:", error);
+        console.error("Error al verificar rol de admin:", error);
         return false;
     }
 };
 
-// 1️⃣ GET: Obtener todas las publicaciones reportadas
+// GET: Obtener Publicaciones Reportadas Pendientes
 app.get('/admin/reported-posts', async (req, res) => {
     try {
-        // Primero verificamos si la tabla 'reportes' existe
         const query = `
             SELECT 
                 p.id,
@@ -1672,7 +1769,7 @@ app.get('/admin/reported-posts', async (req, res) => {
         
         const result = await pool.query(query);
         
-        // Corregir URLs de imágenes
+        // Corregir URLs
         const posts = result.rows.map(post => {
             let imageUrl = post.imageUrl;
             if (imageUrl && !imageUrl.startsWith('http')) {
@@ -1694,9 +1791,8 @@ app.get('/admin/reported-posts', async (req, res) => {
         
         res.json({ posts });
     } catch (error) {
-        console.error('❌ Error al obtener posts reportados:', error);
+        console.error('Error al obtener posts reportados:', error);
         
-        // Si el error es porque la tabla 'reportes' no existe
         if (error.code === '42P01') {
             return res.status(503).json({ 
                 error: 'La tabla de reportes no está configurada. Ejecuta las migraciones SQL necesarias.',
@@ -1709,28 +1805,27 @@ app.get('/admin/reported-posts', async (req, res) => {
 });
 
 
-// 3️⃣ POST: Descartar reporte// 2️⃣ DELETE: Eliminar publicación (por admin) - CON NOTIFICACIÓN
+// DELETE: Eliminar Publicación (por Admin) y Notificar al Autor
 app.delete('/admin/posts/:postId', async (req, res) => {
     const { postId } = req.params;
     const adminId = safeParseInt(req.body.adminId);
-    const { reason } = req.body; // ✅ NUEVA LÍNEA
+    const { reason } = req.body;
 
     if (!adminId) {
         return res.status(400).json({ error: 'ID de administrador inválido' });
     }
 
-    // ✅ VALIDAR RAZÓN
     if (!reason || reason.trim().length === 0) {
         return res.status(400).json({ error: 'Debes proporcionar una razón para eliminar la publicación' });
     }
 
     try {
-        // Verificar si es admin
+        // Verificar Admin
         if (!await isAdmin(adminId)) {
             return res.status(403).json({ error: 'No tienes permisos de administrador' });
         }
 
-        // Obtener información del post Y su autor antes de eliminarlo
+        // Obtener datos del post y autor
         const postQuery = 'SELECT user_id, image_url, content FROM posts WHERE id = $1';
         const postResult = await pool.query(postQuery, [postId]);
         
@@ -1741,7 +1836,7 @@ app.delete('/admin/posts/:postId', async (req, res) => {
         const post = postResult.rows[0];
         const postAuthorId = post.user_id;
 
-        // ✅ CREAR NOTIFICACIÓN PARA EL AUTOR
+        // Crear Notificación para el Autor
         const notificationMessage = `Tu publicación fue eliminada por un administrador. Razón: ${reason}`;
         
         await pool.query(
@@ -1750,46 +1845,45 @@ app.delete('/admin/posts/:postId', async (req, res) => {
             [postAuthorId, notificationMessage, postId]
         );
 
-        // Actualizar reportes relacionados
+        // Actualizar reportes a 'resuelto'
         try {
             await pool.query(
                 "UPDATE reportes SET estado = 'resuelto', reason = $1 WHERE post_id = $2",
                 [reason, postId]
             );
         } catch (err) {
-            console.log('⚠️ No se pudieron actualizar reportes');
+            console.log('No se pudieron actualizar reportes');
         }
 
-        // Eliminar la imagen del servidor si existe
+        // Eliminar archivos
         if (post.image_url) {
             const imagePath = path.join(uploadDir, path.basename(post.image_url));
             if (fs.existsSync(imagePath)) {
                 try {
                     fs.unlinkSync(imagePath);
-                    console.log(`✅ Imagen eliminada: ${imagePath}`);
+                    console.log(`Imagen eliminada: ${imagePath}`);
                 } catch (err) {
-                    console.error("⚠️ Error al eliminar imagen:", err);
+                    console.error("Error al eliminar imagen:", err);
                 }
             }
         }
 
-        // Eliminar likes
+        // Eliminar comentarios y likes
         await pool.query('DELETE FROM likes WHERE post_id = $1', [postId]);
-        
-        // Eliminar comentarios
         await pool.query('DELETE FROM comentarios WHERE post_id = $1', [postId]);
         
         // Eliminar publicación
         await pool.query('DELETE FROM posts WHERE id = $1', [postId]);
 
-        console.log(`✅ Admin ${adminId} eliminó publicación ${postId}. Usuario ${postAuthorId} notificado.`);
+        console.log(`Admin ${adminId} eliminó publicación ${postId}. Usuario ${postAuthorId} notificado.`);
         res.json({ message: 'Publicación eliminada y usuario notificado exitosamente' });
     } catch (error) {
-        console.error('❌ Error al eliminar publicación:', error);
+        console.error('Error al eliminar publicación:', error);
         res.status(500).json({ error: 'Error al eliminar la publicación' });
     }
 });
 
+// POST: Descartar Reporte
 app.post('/admin/reports/:postId/dismiss', async (req, res) => {
     const { postId } = req.params;
     const adminId = safeParseInt(req.body.adminId);
@@ -1799,7 +1893,7 @@ app.post('/admin/reports/:postId/dismiss', async (req, res) => {
     }
 
     try {
-        // Verificar si es admin
+        // Verificar Admin
         if (!await isAdmin(adminId)) {
             return res.status(403).json({ error: 'No tienes permisos de administrador' });
         }
@@ -1814,10 +1908,10 @@ app.post('/admin/reports/:postId/dismiss', async (req, res) => {
             return res.status(404).json({ error: 'No se encontraron reportes pendientes para esta publicación' });
         }
 
-        console.log(`✅ Admin ${adminId} descartó reportes del post ${postId}`);
+        console.log(`Admin ${adminId} descartó reportes del post ${postId}`);
         res.json({ message: 'Reporte descartado exitosamente' });
     } catch (error) {
-        console.error('❌ Error al descartar reporte:', error);
+        console.error('Error al descartar reporte:', error);
         
         if (error.code === '42P01') {
             return res.status(503).json({ 
@@ -1829,7 +1923,7 @@ app.post('/admin/reports/:postId/dismiss', async (req, res) => {
     }
 });
 
-// 4️⃣ GET: Obtener todos los usuarios
+// GET: Obtener Todos los Usuarios (Dashboard Admin)
 app.get('/admin/users', async (req, res) => {
     try {
         const query = `
@@ -1851,7 +1945,7 @@ app.get('/admin/users', async (req, res) => {
         
         const result = await pool.query(query);
         
-        // Corregir URLs de fotos de perfil
+        // Corregir URLs
         const users = result.rows.map(user => {
             let fotoUrl = user.foto_perfil;
             if (fotoUrl && !fotoUrl.startsWith('http')) {
@@ -1866,12 +1960,12 @@ app.get('/admin/users', async (req, res) => {
         
         res.json({ users });
     } catch (error) {
-        console.error('❌ Error al obtener usuarios:', error);
+        console.error('Error al obtener usuarios:', error);
         res.status(500).json({ error: 'Error al cargar usuarios' });
     }
 });
 
-// 5️⃣ POST: Suspender/Activar usuario
+// POST: Suspender o Activar Usuario
 app.post('/admin/users/:userId/toggle-status', async (req, res) => {
     const { userId } = req.params;
     const adminId = safeParseInt(req.body.adminId);
@@ -1881,22 +1975,18 @@ app.post('/admin/users/:userId/toggle-status', async (req, res) => {
     }
 
     try {
-        // Verificar si es admin
+        // Verificar Admin y auto-suspensión
         if (!await isAdmin(adminId)) {
             return res.status(403).json({ error: 'No tienes permisos de administrador' });
         }
-
-        // Verificar que no intente suspenderse a sí mismo
         if (parseInt(userId) === adminId) {
             return res.status(400).json({ error: 'No puedes cambiar tu propio estado' });
         }
-
-        // Verificar que el usuario a suspender no sea admin
         if (await isAdmin(userId)) {
             return res.status(400).json({ error: 'No puedes cambiar el estado de otro administrador' });
         }
 
-        // Obtener estado actual (si no existe la columna, usar 'active' por defecto)
+        // Obtener y alternar estado
         const currentStatus = await pool.query(
             "SELECT COALESCE(estado, 'active') as estado FROM usuarios WHERE id_usuario = $1",
             [userId]
@@ -1909,21 +1999,19 @@ app.post('/admin/users/:userId/toggle-status', async (req, res) => {
         const newStatus = currentStatus.rows[0].estado === 'suspended' ? 'active' : 'suspended';
 
         // Actualizar estado
-        // Si la columna 'estado' no existe, esto fallará y deberás ejecutar la migración SQL
         const updateResult = await pool.query(
             'UPDATE usuarios SET estado = $1 WHERE id_usuario = $2',
             [newStatus, userId]
         );
 
-        console.log(`✅ Admin ${adminId} cambió estado de usuario ${userId} a ${newStatus}`);
+        console.log(`Admin ${adminId} cambió estado de usuario ${userId} a ${newStatus}`);
         res.json({ 
             message: `Usuario ${newStatus === 'suspended' ? 'suspendido' : 'activado'} exitosamente`,
             newStatus 
         });
     } catch (error) {
-        console.error('❌ Error al cambiar estado de usuario:', error);
+        console.error('Error al cambiar estado de usuario:', error);
         
-        // Si el error es porque la columna 'estado' no existe
         if (error.code === '42703') {
             return res.status(503).json({ 
                 error: 'La columna estado no existe. Ejecuta: ALTER TABLE usuarios ADD COLUMN estado VARCHAR(20) DEFAULT \'active\';' 
@@ -1934,18 +2022,18 @@ app.post('/admin/users/:userId/toggle-status', async (req, res) => {
     }
 });
 
-// 6️⃣ GET: Obtener estadísticas generales
+// GET: Obtener Estadísticas Generales del Sistema
 app.get('/admin/stats', async (req, res) => {
     try {
-        // Total de usuarios
+        // Conteo de Usuarios
         const totalUsersResult = await pool.query('SELECT COUNT(*) as count FROM usuarios');
         const totalUsers = parseInt(totalUsersResult.rows[0].count);
 
-        // Total de publicaciones
+        // Conteo de Publicaciones
         const totalPostsResult = await pool.query('SELECT COUNT(*) as count FROM posts');
         const totalPosts = parseInt(totalPostsResult.rows[0].count);
 
-        // Total de reportes pendientes (con manejo de error si la tabla no existe)
+        // Conteo de Reportes Pendientes (con manejo de error)
         let totalReports = 0;
         try {
             const totalReportsResult = await pool.query(
@@ -1953,10 +2041,10 @@ app.get('/admin/stats', async (req, res) => {
             );
             totalReports = parseInt(totalReportsResult.rows[0].count);
         } catch (err) {
-            console.log('⚠️ No se pudo obtener conteo de reportes (tabla puede no existir)');
+            console.log('No se pudo obtener conteo de reportes (tabla puede no existir)');
         }
 
-        // Usuarios activos (con al menos una publicación en los últimos 30 días)
+        // Usuarios Activos (publicación en los últimos 30 días)
         const activeUsersResult = await pool.query(`
             SELECT COUNT(DISTINCT user_id) as count 
             FROM posts 
@@ -1971,64 +2059,14 @@ app.get('/admin/stats', async (req, res) => {
             activeUsers,
         });
     } catch (error) {
-        console.error('❌ Error al obtener estadísticas:', error);
+        console.error('Error al obtener estadísticas:', error);
         res.status(500).json({ error: 'Error al cargar estadísticas' });
     }
 });
 
-// 7️⃣ POST: Reportar una publicación (endpoint para usuarios normales)
-app.post('/posts/:postId/report', async (req, res) => {
-    const { postId } = req.params;
-    const reporterId = safeParseInt(req.body.reporterId);
+// 📬 NOTIFICACIONES
 
-    if (!reporterId) {
-        return res.status(400).json({ error: 'ID de usuario inválido' });
-    }
-
-    try {
-        // Verificar que la publicación existe
-        const postCheck = await pool.query('SELECT id FROM posts WHERE id = $1', [postId]);
-        if (postCheck.rows.length === 0) {
-            return res.status(404).json({ error: 'Publicación no encontrada' });
-        }
-
-        // Verificar que el usuario no haya reportado ya esta publicación
-        const existingReport = await pool.query(
-            'SELECT id_reporte FROM reportes WHERE post_id = $1 AND reporter_id = $2',
-            [postId, reporterId]
-        );
-
-        if (existingReport.rows.length > 0) {
-            return res.status(400).json({ error: 'Ya has reportado esta publicación' });
-        }
-
-        // Insertar el reporte
-        await pool.query(
-            `INSERT INTO reportes (post_id, reporter_id, estado, created_at) 
-             VALUES ($1, $2, 'pendiente', NOW())`,
-            [postId, reporterId]
-        );
-
-        console.log(`✅ Usuario ${reporterId} reportó publicación ${postId}`);
-        res.status(201).json({ message: 'Reporte enviado exitosamente' });
-    } catch (error) {
-        console.error('❌ Error al reportar publicación:', error);
-        
-        if (error.code === '42P01') {
-            return res.status(503).json({ 
-                error: 'El sistema de reportes no está configurado. Contacta al administrador.' 
-            });
-        }
-        
-        res.status(500).json({ error: 'Error al enviar el reporte' });
-    }
-});
-
-// ============================================
-// 📬 ENDPOINTS DE NOTIFICACIONES
-// ============================================
-
-// 1️⃣ GET: Obtener notificaciones de un usuario
+// GET: Obtener Notificaciones de un Usuario
 app.get('/notifications/:userId', async (req, res) => {
     const { userId } = req.params;
     
@@ -2049,6 +2087,7 @@ app.get('/notifications/:userId', async (req, res) => {
             [userId]
         );
 
+        // Contar no leídas
         const unreadCount = await pool.query(
             'SELECT COUNT(*) as count FROM notificaciones WHERE user_id = $1 AND is_read = FALSE',
             [userId]
@@ -2059,12 +2098,12 @@ app.get('/notifications/:userId', async (req, res) => {
             unreadCount: parseInt(unreadCount.rows[0].count)
         });
     } catch (error) {
-        console.error('❌ Error al obtener notificaciones:', error);
+        console.error('Error al obtener notificaciones:', error);
         res.status(500).json({ error: 'Error al obtener notificaciones' });
     }
 });
 
-// 2️⃣ PUT: Marcar una notificación como leída
+// PUT: Marcar una Notificación como Leída
 app.put('/notifications/:notificationId/read', async (req, res) => {
     const { notificationId } = req.params;
     const userId = safeParseInt(req.body.userId);
@@ -2081,12 +2120,12 @@ app.put('/notifications/:notificationId/read', async (req, res) => {
 
         res.json({ success: true });
     } catch (error) {
-        console.error('❌ Error al marcar notificación como leída:', error);
+        console.error('Error al marcar notificación como leída:', error);
         res.status(500).json({ error: 'Error al actualizar notificación' });
     }
 });
 
-// 3️⃣ PUT: Marcar todas las notificaciones como leídas
+// PUT: Marcar Todas las Notificaciones como Leídas
 app.put('/notifications/:userId/read-all', async (req, res) => {
     const { userId } = req.params;
 
@@ -2098,14 +2137,13 @@ app.put('/notifications/:userId/read-all', async (req, res) => {
 
         res.json({ success: true });
     } catch (error) {
-        console.error('❌ Error al marcar todas como leídas:', error);
+        console.error('Error al marcar todas como leídas:', error);
         res.status(500).json({ error: 'Error al actualizar notificaciones' });
     }
 });
 
-// FIN DE ENDPOINTS DE NOTIFICACIONES
+// INICIO SERVIDOR
 
-// ------------------ INICIO SERVIDOR ------------------
 app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Servidor corriendo en http://10.0.2.2:${PORT}`);
+    console.log(`Servidor corriendo en http://10.0.2.2:${PORT}`);
 });

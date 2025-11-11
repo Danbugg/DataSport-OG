@@ -22,9 +22,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_BASE_URL = "http://localhost:3000"; 
 const { width } = Dimensions.get('window');
 
-// -----------------------------------------------------------------
-// FUNCIÓN AUXILIAR PARA EL FORMATO DE FECHA
-// -----------------------------------------------------------------
+// Formato de Fecha
 const formatPostDate = (dateString) => {
     const postDate = new Date(dateString);
     const now = new Date();
@@ -52,7 +50,7 @@ const formatPostDate = (dateString) => {
     }
 };
 
-// --- ESTILOS DE LA TARJETA DE PUBLICACIÓN (POSTCARD) ---
+// ESTILOS DE LA TARJETA DE PUBLICACIÓN (POSTCARD)
 const postStyles = StyleSheet.create({
     postCard: {
         backgroundColor: '#000000', 
@@ -136,8 +134,8 @@ const postStyles = StyleSheet.create({
     }
 });
 
-// --- Componente de Tarjeta de Publicación (PostCard) ---
-const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }) => {
+// RENDERIZADO: Tarjeta de Publicación
+const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions, handleShare }) => {
     const [isLiked, setIsLiked] = useState(post.isLikedByCurrentUser || false);
     const [likeCount, setLikeCount] = useState(post.likeCount || 0);
 
@@ -220,6 +218,18 @@ const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }
                     />
                     <Text style={postStyles.actionText}>{post.commentCount || 0}</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity 
+                    onPress={() => handleShare(post.id, post.sharedPostId)} 
+                    style={postStyles.actionButton}
+                >
+                    <Ionicons 
+                        name="repeat" 
+                        size={24} 
+                        color="#4CAF50"
+                    />
+                    <Text style={postStyles.actionText}>{post.shareCount || 0}</Text>
+                </TouchableOpacity>
             </View>
 
             <View style={postStyles.postSeparator} />
@@ -227,13 +237,14 @@ const PostCard = ({ post, navigation, onLikeToggle, isPostOwner, handleOptions }
     );
 };
 
-// --- Componente PRINCIPAL ProfileScreen / PerfilUsuarioScreen ---
+// COMPONENTE PRINCIPAL: ProfileScreen
 export default function ProfileScreen() {
     const route = useRoute();
     const navigation = useNavigation();
     
     const routeUserId = route.params?.userId || route.params?.itemId; 
     
+    // ESTADOS
     const [userProfile, setUserProfile] = useState(null);
     const [userPosts, setUserPosts] = useState([]);
     const [followMetrics, setFollowMetrics] = useState({ followersCount: 0, followingCount: 0 });
@@ -242,18 +253,23 @@ export default function ProfileScreen() {
     const [loading, setLoading] = useState(true);
     const [isToggleLoading, setIsToggleLoading] = useState(false); 
     const [currentViewingId, setCurrentViewingId] = useState(null);
-    const [isAdmin, setIsAdmin] = useState(false); // NUEVO: Estado para verificar si es admin
+    const [isAdmin, setIsAdmin] = useState(false);
     const fondoLogin = require("../assets/fondoLogin.jpg"); 
 
-    // Estados del Modal
+    // Estados del Modal de Publicaciones
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedPostId, setSelectedPostId] = useState(null);
     const [isModalPostOwner, setIsModalPostOwner] = useState(false);
     const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
     const [confirmReportVisible, setConfirmReportVisible] = useState(false);
 
+    // Estados del Modal de Ajustes
+    const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+    const [confirmDeleteAccountVisible, setConfirmDeleteAccountVisible] = useState(false);
+
     const isOwnProfile = String(currentViewingId) === String(currentLoggedInId);
 
+    // Funciones de Navegación Social 
     const navigateToFollowers = () => {
         if (!userProfile) return;
         navigation.navigate('SeguidoresScreen', { 
@@ -287,7 +303,6 @@ export default function ProfileScreen() {
         }
     };
 
-    // --- FUNCIÓN PARA ELIMINAR PUBLICACIÓN ---
     const deletePost = useCallback((postId) => {
         setModalVisible(false);
         setSelectedPostId(postId);
@@ -317,7 +332,6 @@ export default function ProfileScreen() {
         }
     }, [selectedPostId, currentLoggedInId]);
 
-    // --- FUNCIÓN PARA REPORTAR PUBLICACIÓN ---
     const reportPost = useCallback((postId) => {
         setModalVisible(false);
         setSelectedPostId(postId);
@@ -346,7 +360,6 @@ export default function ProfileScreen() {
         }
     }, [selectedPostId, currentLoggedInId]);
 
-    // --- MANEJO DEL MENÚ DE OPCIONES ---
     const handlePostOptions = useCallback((postId, isAuthor) => {
         if (!currentLoggedInId) {
             Alert.alert("Advertencia", "Debes iniciar sesión para usar estas opciones.");
@@ -356,9 +369,48 @@ export default function ProfileScreen() {
         setSelectedPostId(postId);
         setIsModalPostOwner(isAuthor);
         setModalVisible(true);
-
     }, [currentLoggedInId]);
+
+    const handleShare = (postId, sharedPostId) => {
+        if (!currentLoggedInId) {
+            Alert.alert("Advertencia", "Debes iniciar sesión para compartir publicaciones.");
+            return;
+        }
+
+        const originalPostId = sharedPostId || postId;
     
+        Alert.alert(
+            "Compartir Publicación",
+            "¿Deseas compartir esta publicación en tu perfil?",
+            [
+                { text: "Cancelar", style: "cancel" },
+                {
+                    text: "Compartir",
+                    onPress: async () => {
+                        try {
+                            const response = await fetch(`${API_BASE_URL}/posts/${originalPostId}/share`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ userId: currentLoggedInId }),
+                            });
+
+                            if (response.ok) {
+                                Alert.alert("Éxito", "¡Publicación compartida exitosamente!");
+                                fetchProfile(); 
+                            } else {
+                                const data = await response.json().catch(() => ({}));
+                                Alert.alert("Error", data.error || "No se pudo compartir la publicación.");
+                            }
+                        } catch (error) {
+                            console.error("Error al compartir:", error);
+                            Alert.alert("Error", "Error de conexión al compartir.");
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     const handleLikeToggle = useCallback(async (postId, newIsLiked) => {
         if (!currentLoggedInId) { Alert.alert("Error", "Debes iniciar sesión para dar 'Me gusta'."); return false; }
         try {
@@ -378,20 +430,25 @@ export default function ProfileScreen() {
         setIsToggleLoading(true);
         const endpoint = isFollowing ? `/unfollow/${currentViewingId}` : `/follow/${currentViewingId}`;
         const method = isFollowing ? "DELETE" : "POST";
+        
+        const newIsFollowing = !isFollowing;
+        setIsFollowing(newIsFollowing);
+        setFollowMetrics(prev => ({ ...prev, followersCount: prev.followersCount + (newIsFollowing ? 1 : -1) }));
+
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ followerId: currentLoggedInId }),
             });
-            if (response.ok) {
-                const newIsFollowing = !isFollowing;
-                setIsFollowing(newIsFollowing);
-                setFollowMetrics(prev => ({ ...prev, followersCount: prev.followersCount + (newIsFollowing ? 1 : -1) }));
-            } else {
+            if (!response.ok) {
+                setIsFollowing(!newIsFollowing);
+                setFollowMetrics(prev => ({ ...prev, followersCount: prev.followersCount + (newIsFollowing ? -1 : 1) }));
                 const data = await response.json().catch(() => ({}));
                 Alert.alert("Error", data.error || `No se pudo ${isFollowing ? 'dejar de seguir' : 'seguir'}.`);
             }
-        } catch (error) {
-            console.error("Error de red en el seguimiento:", error);
+        } catch (error) { 
+            console.error("Error de red en el seguimiento:", error); 
+            setIsFollowing(!newIsFollowing);
+            setFollowMetrics(prev => ({ ...prev, followersCount: prev.followersCount + (newIsFollowing ? -1 : 1) }));
             Alert.alert("Error", "Error de conexión al intentar seguir.");
         } finally { setIsToggleLoading(false); }
     };
@@ -422,7 +479,6 @@ export default function ProfileScreen() {
                 const profileData = { ...data.user, id_usuario: String(data.user.id_usuario), descripcion: data.user.descripcion || '' };
                 setUserProfile(profileData);
                 
-                // NUEVO: Verificar si el usuario es admin (rol_id === 2)
                 setIsAdmin(data.user.rol_id === 2);
                 
                 success = true;
@@ -444,53 +500,45 @@ export default function ProfileScreen() {
         }, [routeUserId]) 
     );
     
-    const handleDeleteAccount = async () => {
-        const idToDelete = await AsyncStorage.getItem("userId");
-        if (!idToDelete) { Alert.alert("Error", "No se encontró el ID de usuario para eliminar."); return; }
-        Alert.alert("Eliminar Cuenta", "¿Estás seguro de que quieres eliminar tu cuenta? Esta acción es irreversible.", [
-                { text: "Cancelar", style: "cancel" },
-                {
-                    text: "Eliminar", style: "destructive", onPress: async () => {
-                        try {
-                            const response = await fetch(`${API_BASE_URL}/delete-account/${idToDelete}`, { method: "DELETE", });
-                            if (response.ok) {
-                                Alert.alert("¡Hecho!", "Tu cuenta ha sido eliminada con éxito.");
-                                await AsyncStorage.clear();
-                                navigation.replace('LoginScreen');
-                            } else {
-                                const errorData = await response.json().catch(() => ({}));
-                                Alert.alert("Error", errorData.error || "No se pudo eliminar la cuenta.");
-                            }
-                        } catch (error) { console.error("Error al eliminar la cuenta:", error); Alert.alert("Error", "No se pudo conectar al servidor."); }
-                    },
-                },
-            ]
-        );
-    };
-    
-    // MODIFICADO: Agregar opción de Panel de Administración
+    // Función para abrir el modal de ajustes
     const handleSettings = () => {
         if (!isOwnProfile) return;
+        setSettingsModalVisible(true);
+    };
+
+    // Función para confirmar eliminación de cuenta
+    const handleDeleteAccount = () => {
+        setSettingsModalVisible(false);
+        setConfirmDeleteAccountVisible(true);
+    };
+
+    // Función para ejecutar la eliminación de cuenta
+    const executeDeleteAccount = async () => {
+        setConfirmDeleteAccountVisible(false);
         
-        const options = [
-            { text: "Editar Perfil", onPress: () => navigation.navigate('EditProfileScreen', { userId: currentLoggedInId, userProfile }) },
-        ];
-        
-        // Agregar opción de Panel de Administración si es admin
-        if (isAdmin) {
-            options.push({
-                text: "Panel de Administración",
-                onPress: () => navigation.navigate('AdminPanelScreen')
-            });
+        const idToDelete = await AsyncStorage.getItem("userId");
+        if (!idToDelete) { 
+            Alert.alert("Error", "No se encontró el ID de usuario para eliminar."); 
+            return; 
         }
-        
-        options.push(
-            { text: "Cerrar Sesión", onPress: async () => { await AsyncStorage.clear(); navigation.replace('LoginScreen'); } },
-            { text: "Eliminar Cuenta", onPress: handleDeleteAccount, style: "destructive" },
-            { text: "Cancelar", style: "cancel" }
-        );
-        
-        Alert.alert("Opciones", "Selecciona una opción", options);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/delete-account/${idToDelete}`, { 
+                method: "DELETE" 
+            });
+            
+            if (response.ok) {
+                Alert.alert("¡Hecho!", "Tu cuenta ha sido eliminada con éxito.");
+                await AsyncStorage.clear();
+                navigation.replace('LoginScreen');
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                Alert.alert("Error", errorData.error || "No se pudo eliminar la cuenta.");
+            }
+        } catch (error) { 
+            console.error("Error al eliminar la cuenta:", error); 
+            Alert.alert("Error", "No se pudo conectar al servidor."); 
+        }
     };
 
     if (loading) {
@@ -510,7 +558,7 @@ export default function ProfileScreen() {
         );
     }
 
-    // --- MODAL DE OPCIONES DE PUBLICACIÓN ---
+    // MODAL DE OPCIONES DE PUBLICACIÓN 
     const PostOptionsModal = () => (
         <Modal
             animationType="fade"
@@ -525,7 +573,7 @@ export default function ProfileScreen() {
             >
                 <View style={modalStyles.modalView}>
                     
-                    {isModalPostOwner ? (
+                    {isModalPostOwner && (
                         <TouchableOpacity
                             style={[modalStyles.button, modalStyles.deleteButton]}
                             onPress={() => deletePost(selectedPostId)}
@@ -533,7 +581,9 @@ export default function ProfileScreen() {
                             <Ionicons name="trash-outline" size={24} color="#ff3333" />
                             <Text style={modalStyles.deleteText}>Eliminar Publicación</Text>
                         </TouchableOpacity>
-                    ) : (
+                    )}
+
+                    {!isModalPostOwner && (
                         <TouchableOpacity
                             style={[modalStyles.button, modalStyles.reportButton]}
                             onPress={() => reportPost(selectedPostId)}
@@ -556,7 +606,7 @@ export default function ProfileScreen() {
         </Modal>
     );
 
-    // --- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN ---
+    // MODAL DE CONFIRMACIÓN DE ELIMINACIÓN 
     const ConfirmDeleteModal = () => (
         <Modal
             animationType="fade"
@@ -597,7 +647,7 @@ export default function ProfileScreen() {
         </Modal>
     );
 
-    // --- MODAL DE CONFIRMACIÓN DE REPORTE ---
+    // MODAL DE CONFIRMACIÓN DE REPORTE
     const ConfirmReportModal = () => (
         <Modal
             animationType="fade"
@@ -638,14 +688,138 @@ export default function ProfileScreen() {
         </Modal>
     );
 
+    // MODAL DE AJUSTES
+    const SettingsModal = () => (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={settingsModalVisible}
+            onRequestClose={() => setSettingsModalVisible(false)}
+        >
+            <TouchableOpacity 
+                style={modalStyles.centeredView} 
+                activeOpacity={1}
+                onPress={() => setSettingsModalVisible(false)}
+            >
+                <View style={modalStyles.modalView}>
+                    
+                    {/* Editar Perfil */}
+                    <TouchableOpacity
+                        style={[modalStyles.button, modalStyles.editButton]}
+                        onPress={() => {
+                            setSettingsModalVisible(false);
+                            navigation.navigate('EditProfileScreen', { 
+                                userId: currentLoggedInId, 
+                                userProfile 
+                            });
+                        }}
+                    >
+                        <Ionicons name="create-outline" size={24} color="#00aaff" />
+                        <Text style={modalStyles.editText}>Editar Perfil</Text>
+                    </TouchableOpacity>
+
+                    {/* Panel de Administración (solo si es admin) */}
+                    {isAdmin && (
+                        <TouchableOpacity
+                            style={[modalStyles.button, modalStyles.adminButton]}
+                            onPress={() => {
+                                setSettingsModalVisible(false);
+                                navigation.navigate('AdminPanelScreen');
+                            }}
+                        >
+                            <Ionicons name="shield-checkmark-outline" size={24} color="#FFD700" />
+                            <Text style={modalStyles.adminText}>Panel de Administración</Text>
+                        </TouchableOpacity>
+                    )}
+
+                    {/* Cerrar Sesión */}
+                    <TouchableOpacity
+                        style={[modalStyles.button, modalStyles.logoutButton]}
+                        onPress={async () => {
+                            setSettingsModalVisible(false);
+                            await AsyncStorage.clear();
+                            navigation.replace('LoginScreen');
+                        }}
+                    >
+                        <Ionicons name="log-out-outline" size={24} color="#888" />
+                        <Text style={modalStyles.logoutText}>Cerrar Sesión</Text>
+                    </TouchableOpacity>
+
+                    <View style={modalStyles.separator} />
+
+                    {/* Eliminar Cuenta */}
+                    <TouchableOpacity
+                        style={[modalStyles.button, modalStyles.deleteAccountButton]}
+                        onPress={handleDeleteAccount}
+                    >
+                        <Ionicons name="trash-outline" size={24} color="#ff3333" />
+                        <Text style={modalStyles.deleteText}>Eliminar Cuenta</Text>
+                    </TouchableOpacity>
+
+                    <View style={modalStyles.separator} />
+
+                    {/* Cancelar */}
+                    <TouchableOpacity
+                        style={[modalStyles.button, modalStyles.cancelButton]}
+                        onPress={() => setSettingsModalVisible(false)}
+                    >
+                        <Text style={modalStyles.cancelText}>Cancelar</Text>
+                    </TouchableOpacity>
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    );
+
+    // MODAL DE CONFIRMACIÓN DE ELIMINACIÓN DE CUENTA
+    const ConfirmDeleteAccountModal = () => (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={confirmDeleteAccountVisible}
+            onRequestClose={() => setConfirmDeleteAccountVisible(false)}
+        >
+            <TouchableOpacity 
+                style={modalStyles.centeredView} 
+                activeOpacity={1}
+                onPress={() => setConfirmDeleteAccountVisible(false)}
+            >
+                <View style={modalStyles.confirmModalView}>
+                    <Ionicons name="warning-outline" size={50} color="#ff3333" style={{ marginBottom: 15 }} />
+                    
+                    <Text style={modalStyles.confirmTitle}>Eliminar Cuenta</Text>
+                    <Text style={modalStyles.confirmMessage}>
+                        ¿Estás seguro de que quieres eliminar tu cuenta? Esta acción es irreversible y perderás todos tus datos.
+                    </Text>
+
+                    <View style={modalStyles.confirmButtonsContainer}>
+                        <TouchableOpacity
+                            style={[modalStyles.confirmButton, modalStyles.cancelConfirmButton]}
+                            onPress={() => setConfirmDeleteAccountVisible(false)}
+                        >
+                            <Text style={modalStyles.cancelConfirmText}>Cancelar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[modalStyles.confirmButton, modalStyles.deleteConfirmButton]}
+                            onPress={executeDeleteAccount}
+                        >
+                            <Text style={modalStyles.deleteConfirmText}>Eliminar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        </Modal>
+    );
+
     return (
         <SafeAreaView style={styles.safeAreaContainer}> 
              <StatusBar barStyle="light-content" backgroundColor="black" /> 
             <ImageBackground source={fondoLogin} style={styles.background}>
                 <View style={styles.overlay}>
                     <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+                        
+                        {/* Header y Botones de Acción */}
                         <View style={styles.profileHeader}>
-                            
                             <View style={styles.profileInfoGroup}> 
                                 {!isOwnProfile && (
                                     <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
@@ -661,7 +835,6 @@ export default function ProfileScreen() {
                                     <View style={styles.userInfoText}>
                                         <Text style={styles.usernameText}>@{userProfile.nombre_usuario}</Text>
                                         <Text style={styles.userStatus}>{userProfile.descripcion || 'Sin descripción'}</Text>
-                                        {/* NUEVO: Mostrar insignia de admin */}
                                         {isAdmin && isOwnProfile && (
                                             <View style={styles.adminBadge}>
                                                 <Ionicons name="shield-checkmark" size={16} color="#FFD700" />
@@ -697,6 +870,7 @@ export default function ProfileScreen() {
                             
                         </View>
 
+                        {/* Bloque de Métricas Sociales */}
                         <View style={styles.compactMetricsContainer}>
                             <TouchableOpacity onPress={navigateToFollowers} style={styles.compactMetricItem}>
                                 <Text style={styles.compactMetricNumber}>{followMetrics.followersCount}</Text>
@@ -714,6 +888,7 @@ export default function ProfileScreen() {
                             </View>
                         </View>
                         
+                        {/* Detalles Adicionales */}
                         <View style={styles.profileDetailsContainer}>
                             <Text style={styles.detailText}>
                                 <Text style={styles.detailLabel}>Nombre: </Text>
@@ -729,6 +904,7 @@ export default function ProfileScreen() {
                             <Text style={styles.publicationsTitle}>Publicaciones ({userPosts.length})</Text>
                         </View>
                         
+                        {/* Lista de Publicaciones */}
                         <View style={styles.publicationsContainer}>
                             {userPosts.length > 0 ? (
                                 <FlatList
@@ -745,6 +921,7 @@ export default function ProfileScreen() {
                                                 onLikeToggle={handleLikeToggle}
                                                 isPostOwner={isOwner}
                                                 handleOptions={handlePostOptions}
+                                                handleShare={handleShare}
                                             />
                                         );
                                     }}
@@ -761,14 +938,18 @@ export default function ProfileScreen() {
                     </ScrollView>
                 </View>
             </ImageBackground>
+            
+            {/* Modales */}
             <PostOptionsModal />
             <ConfirmDeleteModal />
             <ConfirmReportModal />
+            <SettingsModal />
+            <ConfirmDeleteAccountModal />
         </SafeAreaView>
     );
 }
 
-// --- ESTILOS DEL MODAL PERSONALIZADO ---
+// ESTILOS DEL MODAL PERSONALIZADO 
 const modalStyles = StyleSheet.create({
     centeredView: {
         flex: 1,
@@ -796,6 +977,36 @@ const modalStyles = StyleSheet.create({
         width: '100%',
         borderRadius: 15,
         marginVertical: 5,
+    },
+    editButton: {
+        backgroundColor: '#333',
+    },
+    editText: {
+        color: '#00aaff',
+        fontWeight: 'bold',
+        fontSize: 18,
+        marginLeft: 10,
+    },
+    adminButton: {
+        backgroundColor: '#333',
+    },
+    adminText: {
+        color: '#FFD700',
+        fontWeight: 'bold',
+        fontSize: 18,
+        marginLeft: 10,
+    },
+    logoutButton: {
+        backgroundColor: '#333',
+    },
+    logoutText: {
+        color: '#888',
+        fontWeight: 'bold',
+        fontSize: 18,
+        marginLeft: 10,
+    },
+    deleteAccountButton: {
+        backgroundColor: '#333',
     },
     reportButton: {
         backgroundColor: '#333', 
@@ -1044,18 +1255,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
     },
     compactMetricNumber: {
-        fontSize: 18, 
-        fontWeight: 'bold', 
-        color: '#ff0000', 
+        fontSize: 18, fontWeight: 'bold', color: '#ff0000', 
     },
     compactMetricLabel: {
-        fontSize: 13, 
-        color: '#ccc', 
-        marginTop: 2,
+        fontSize: 13, color: '#ccc', marginTop: 2,
     },
     compactMetricSeparator: {
-        width: 1, 
-        height: '70%', 
-        backgroundColor: '#444', 
+        width: 1, height: '70%', backgroundColor: '#444', 
     },
 });

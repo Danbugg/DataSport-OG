@@ -16,7 +16,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_BASE_URL = "http://localhost:3000"; 
 
-// --- Componente para mostrar un solo comentario ---
+// RENDERIZADO: Comentario Individual
+
 const CommentItem = ({ comment }) => {
     return (
         <View style={commentStyles.commentContainer}>
@@ -27,38 +28,48 @@ const CommentItem = ({ comment }) => {
                 {comment.content}
             </Text>
             <Text style={commentStyles.commentDate}>
+                {/* Formato de fecha para mejor lectura */}
                 {new Date(comment.createdAt).toLocaleDateString()}
             </Text>
         </View>
     );
 };
 
-// --- Componente Principal ---
+// COMPONENTE PRINCIPAL: CommentsScreen
+
 export default function CommentsScreen({ route, navigation }) {
+    // Obtiene el ID del post desde los parámetros de navegación
     const { postId } = route.params;
 
+    // ESTADOS
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [newComment, setNewComment] = useState('');
     const [isSending, setIsSending] = useState(false);
     const [currentUserId, setCurrentUserId] = useState(null);
 
+    // EFECTO: Carga Inicial de Datos 
     useEffect(() => {
         const loadInitialData = async () => {
+            // Obtener ID de usuario para habilitar el envío
             const userId = await AsyncStorage.getItem("userId");
             setCurrentUserId(userId);
+            // Cargar la lista de comentarios
             fetchComments();
         };
         loadInitialData();
     }, []);
 
+    // FUNCIÓN: Obtener Comentarios del Post
     const fetchComments = useCallback(async () => {
         setLoading(true);
         try {
+            // Llama al endpoint de lectura de comentarios
             const response = await fetch(`${API_BASE_URL}/posts/${postId}/comments`);
 
             if (response.ok) {
                 const data = await response.json();
+                
                 setComments(data.comments || []); 
             } else {
                 Alert.alert("Error", "No se pudieron cargar los comentarios.");
@@ -72,7 +83,9 @@ export default function CommentsScreen({ route, navigation }) {
         }
     }, [postId]);
 
+    // FUNCIÓN: Enviar Nuevo Comentario
     const handleSendComment = async () => {
+        // Validación de Sesión y Contenido
         if (!currentUserId) {
             Alert.alert("Error", "Debes iniciar sesión para comentar.");
             return;
@@ -85,6 +98,7 @@ export default function CommentsScreen({ route, navigation }) {
         setIsSending(true);
         
         try {
+            // Llama al endpoint POST para crear el comentario
             const response = await fetch(`${API_BASE_URL}/posts/${postId}/comments`, {
                 method: "POST",
                 headers: {
@@ -98,14 +112,17 @@ export default function CommentsScreen({ route, navigation }) {
 
             if (response.ok) {
                 const data = await response.json();
+                // Limpiar input y dar feedback
                 Alert.alert("Éxito", "Comentario publicado.");
                 setNewComment('');
                 
-                // Añadir el comentario al final del array (aparecerá abajo)
+                // Actualización optimista: Añadir el nuevo comentario
                 setComments(prevComments => [...prevComments, data.newComment]); 
 
             } else {
-                Alert.alert("Error", "Error al enviar el comentario.");
+                // Manejo de errores de servidor
+                const errorData = await response.json().catch(() => ({}));
+                Alert.alert("Error", errorData.error || "Error al enviar el comentario.");
             }
         } catch (error) {
             console.error("Error al enviar el comentario:", error);
@@ -115,9 +132,10 @@ export default function CommentsScreen({ route, navigation }) {
         }
     };
 
+    // RENDERIZADO: Estructura de la Pantalla
     return (
         <View style={styles.container}>
-            {/* Header fuera del KeyboardAvoidingView */}
+            {/* Encabezado Fijo */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -125,24 +143,29 @@ export default function CommentsScreen({ route, navigation }) {
                 <Text style={styles.title}>Comentarios</Text>
             </View>
 
-            {/* KeyboardAvoidingView solo para el contenido y el input */}
+            {/* Manejo de Teclado */}
             <KeyboardAvoidingView 
                 style={styles.content}
+                // Ajuste específico por plataforma para el teclado
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
             >
                 {loading ? (
+                    // Indicador de carga de comentarios
                     <ActivityIndicator size="large" color="#00aaff" style={styles.loading} />
                 ) : (
+                    // Lista de comentarios
                     <FlatList
                         data={comments}
                         keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
                         renderItem={({ item }) => <CommentItem comment={item} />}
                         contentContainerStyle={[
                             styles.listContent,
+                            // Asegura que el contenedor ocupe todo el espacio si está vacío
                             comments.length === 0 && styles.listContentEmpty
                         ]}
                         ListEmptyComponent={() => (
+                            // Mensaje si no hay comentarios
                             <View style={styles.emptyContainer}>
                                 <Text style={styles.emptyText}>
                                     ¡Sé el primero en comentar!
@@ -152,7 +175,7 @@ export default function CommentsScreen({ route, navigation }) {
                     />
                 )}
 
-                {/* Área de Input para Comentar */}
+                {/* Contenedor de Input y Botón de Enviar */}
                 <View style={styles.inputContainer}>
                     <TextInput
                         style={styles.commentInput}
@@ -166,6 +189,7 @@ export default function CommentsScreen({ route, navigation }) {
                     <TouchableOpacity 
                         style={[
                             styles.sendButton, 
+                            // Deshabilita el botón si el texto está vacío o si se está enviando
                             (newComment.trim().length === 0 || isSending) && styles.sendButtonDisabled
                         ]}
                         onPress={handleSendComment}
@@ -183,7 +207,8 @@ export default function CommentsScreen({ route, navigation }) {
     );
 }
 
-// --- Estilos de la pantalla de comentarios ---
+// ESTILOS
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -246,7 +271,7 @@ const styles = StyleSheet.create({
     commentInput: {
         flex: 1,
         minHeight: 40,
-        maxHeight: 100,
+        maxHeight: 100, // Límite de altura para el multiline
         backgroundColor: '#222',
         borderRadius: 20,
         paddingHorizontal: 15,
@@ -269,7 +294,7 @@ const styles = StyleSheet.create({
     },
 });
 
-// --- Estilos del Comentario Individual ---
+// Estilos del Comentario Individual 
 const commentStyles = StyleSheet.create({
     commentContainer: {
         backgroundColor: '#1a1a1a',

@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker"; 
 
-// ✅ CORREGIDO: Usa localhost (porque estás usando celular por USB + adb reverse)
 const API_BASE_URL = "http://localhost:3000"; 
 
 export default function EditProfileScreen({ route, navigation }) {

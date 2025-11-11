@@ -17,14 +17,19 @@ import { Ionicons } from "@expo/vector-icons";
 
 const API_BASE_URL = "http://localhost:3000";
 
+// COMPONENTE PRINCIPAL: CreatePostScreen
+
 export default function CreatePostScreen({ navigation }) {
+    // ESTADOS
     const [content, setContent] = useState("");
-    const [imageUri, setImageUri] = useState(null);
+    const [imageUri, setImageUri] = useState(null); // URI local de la imagen seleccionada
     const [loading, setLoading] = useState(false);
 
     const fondoLogin = require("../assets/fondoLogin.jpg");
 
+    // FUNCIÓN: Abrir Galería y Seleccionar Imagen
     const pickImage = async () => {
+        // Solicitar permisos
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
             Alert.alert(
@@ -34,26 +39,29 @@ export default function CreatePostScreen({ navigation }) {
             return;
         }
 
+        // Lanzar selector de galería
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
             aspect: [4, 3],
-            quality: 0.7,
+            quality: 0.7, // Comprime la calidad para una subida más rápida
         });
 
         if (!result.canceled) {
+            // Guarda la URI local de la imagen seleccionada
             setImageUri(result.assets[0].uri);
         }
     };
 
+    // FUNCIÓN: Crear y Subir Publicación 
     const handleCreatePost = async () => {
         const userId = await AsyncStorage.getItem("userId");
 
+        // Validaciones previas
         if (!userId || isNaN(userId)) {
             Alert.alert("Error", "ID de usuario no válido. Por favor, vuelve a iniciar sesión.");
             return;
         }
-
         if (content.trim().length === 0) {
             Alert.alert("Error", "El contenido de la publicación no puede estar vacío.");
             return;
@@ -62,76 +70,77 @@ export default function CreatePostScreen({ navigation }) {
         setLoading(true);
 
         try {
-            // 1. Crear FormData para enviar texto y archivo binario (imagen)
+            // 4. CREACIÓN DE FORM DATA 
             const formData = new FormData();
             formData.append("userId", userId);
             formData.append("content", content.trim());
 
             if (imageUri) {
-                // Obtenemos la extensión del archivo para el tipo y nombre
+                // Prepara los metadatos de la imagen para el Multer del servidor
                 const filename = imageUri.split('/').pop();
                 const match = /\.(\w+)$/.exec(filename);
                 const type = match ? `image/${match[1]}` : `image`;
 
-                // 2. Adjuntar la imagen con el formato esperado por el backend
+                // Adjunta el archivo binario
                 formData.append("postImage", {
                     uri: imageUri,
-                    type: type, // Usamos el tipo inferido o 'image' por defecto
-                    name: filename, // Usamos el nombre real
+                    type: type, 
+                    name: filename, 
                 });
             }
 
-            // 3. 🔥 Petición con la URL corregida 🔥
+            // ENVÍO DE LA PETICIÓN 
             const response = await fetch(`${API_BASE_URL}/posts/create`, {
                 method: "POST",
-                // Importante: No especificar Content-Type. FormData lo hace.
-                body: formData, // Enviar el objeto FormData
+                // FormData maneja automáticamente el Content-Type
+                body: formData, 
             });
 
             if (response.ok) {
                 Alert.alert("Éxito", "Publicación creada con éxito.");
                 
-                // Limpiar el formulario
+                // Limpiar estados
                 setContent("");
                 setImageUri(null);
 
-                // 🔄 CAMBIO CLAVE AQUÍ 🔄
-                // Navegar a la pestaña 'HomeTab' (el Stack Navigator) y luego a la pantalla 'Feed'
+                // 6. NAVEGACIÓN Y REFRESCO: Volver al Feed y forzar actualización
                 navigation.navigate('HomeTab', { 
                     screen: 'Feed', 
+                    // Pasar parámetro para indicar al Feed que debe recargar
                     params: { shouldRefresh: true } 
                 });
                 
             } else {
+                // Manejo de errores detallado (incluyendo problemas de ruta del servidor)
                 const textResponse = await response.text();
-                // Intentamos manejar errores de Express y de la API
                 if (textResponse.includes('Cannot POST')) {
-                    Alert.alert("Error de Conexión/Ruta", "El servidor no encontró la ruta POST /posts/create. Asegúrate de que el servidor esté corriendo en la IP correcta.");
+                    Alert.alert("Error de Conexión/Ruta", "El servidor no encontró la ruta POST /posts/create. Asegúrate de que el servidor esté corriendo.");
                 } else {
                     try {
                         const errorData = JSON.parse(textResponse);
                         Alert.alert("Error", errorData.error || "Error al crear la publicación.");
                     } catch (e) {
-                        // Muestra el error HTML de Express
-                        Alert.alert("Error", `Respuesta de error no válida (posible error de servidor): ${textResponse.substring(0, 100)}...`);
+                        Alert.alert("Error", `Respuesta de error de servidor: ${textResponse.substring(0, 100)}...`);
                     }
                 }
             }
         } catch (error) {
             console.error("Error al crear la publicación:", error);
-            // Error de red más claro
-            Alert.alert("Error de Conexión", "No se pudo conectar con el servidor. Revisa que el servidor Node.js esté activo en http://10.0.2.2:3000.");
+            // Error de red
+            Alert.alert("Error de Conexión", "No se pudo conectar con el servidor. Revisa que el servidor Node.js esté activo.");
         } finally {
             setLoading(false);
         }
     };
 
+    // RENDERIZADO
     return (
         <ImageBackground source={fondoLogin} style={styles.background}>
             <View style={styles.overlay}>
                 <ScrollView contentContainerStyle={styles.scrollContent}>
                     <Text style={styles.title}>Crear Nueva Publicación</Text>
                     
+                    {/* Input de Contenido */}
                     <TextInput
                         style={styles.contentInput}
                         placeholder="¿Qué quieres compartir con la comunidad DataSport?"
@@ -144,6 +153,7 @@ export default function CreatePostScreen({ navigation }) {
                     />
                     <Text style={styles.charCount}>{content.length}/500</Text>
 
+                    {/* Botón para Seleccionar Imagen */}
                     <TouchableOpacity style={styles.imageButton} onPress={pickImage} disabled={loading}>
                         <Ionicons name="image-outline" size={24} color="#00aaff" />
                         <Text style={styles.imageButtonText}>
@@ -151,6 +161,7 @@ export default function CreatePostScreen({ navigation }) {
                         </Text>
                     </TouchableOpacity>
 
+                    {/* Previsualización y Botón de Eliminar Imagen */}
                     {imageUri && (
                         <View style={styles.imagePreviewContainer}>
                             <Image source={{ uri: imageUri }} style={styles.imagePreview} />
@@ -160,6 +171,7 @@ export default function CreatePostScreen({ navigation }) {
                         </View>
                     )}
 
+                    {/* Botón de Publicar */}
                     <TouchableOpacity
                         style={styles.postButton}
                         onPress={handleCreatePost}
@@ -177,6 +189,8 @@ export default function CreatePostScreen({ navigation }) {
         </ImageBackground>
     );
 }
+
+// ESTILOS
 
 const styles = StyleSheet.create({
     background: { flex: 1, resizeMode: "cover" },
@@ -261,5 +275,4 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "bold",
     },
-    
 });
