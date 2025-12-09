@@ -10,6 +10,7 @@ import {
     TouchableOpacity,
     KeyboardAvoidingView,
     Platform,
+    Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -17,28 +18,59 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const API_BASE_URL = "http://localhost:3000"; 
 
 // RENDERIZADO: Comentario Individual
-
 const CommentItem = ({ comment }) => {
+    // El backend puede devolver foto_perfil, authorProfilePic, o la URL completa
+    let avatarUrl = comment.foto_perfil || comment.authorProfilePic;
+    
+    // Si la URL no incluye http, agregarle el API_BASE_URL
+    if (avatarUrl && !avatarUrl.startsWith('http')) {
+        avatarUrl = `${API_BASE_URL}${avatarUrl}`;
+    }
+    
+    console.log("Avatar URL:", avatarUrl);
+
     return (
         <View style={commentStyles.commentContainer}>
-            <Text style={commentStyles.authorUsername}>
-                {comment.authorUsername || 'Usuario Anónimo'}
-            </Text>
-            <Text style={commentStyles.commentContent}>
-                {comment.content}
-            </Text>
-            <Text style={commentStyles.commentDate}>
-                {/* Formato de fecha para mejor lectura */}
-                {new Date(comment.createdAt).toLocaleDateString()}
-            </Text>
+            <View style={commentStyles.commentHeader}>
+                {/* Foto de perfil */}
+                <View style={commentStyles.avatarContainer}>
+                    {avatarUrl ? (
+                        <Image 
+                            source={{ uri: avatarUrl }}
+                            style={commentStyles.avatar}
+                        />
+                    ) : (
+                        <View style={commentStyles.avatarPlaceholder}>
+                            <Ionicons name="person" size={20} color="#666" />
+                        </View>
+                    )}
+                </View>
+                
+                {/* Información del usuario y comentario */}
+                <View style={commentStyles.commentContent}>
+                    <Text style={commentStyles.authorUsername}>
+                        {comment.authorUsername || 'Usuario Anónimo'}
+                    </Text>
+                    <Text style={commentStyles.commentText}>
+                        {comment.content}
+                    </Text>
+                    <Text style={commentStyles.commentDate}>
+                        {new Date(comment.createdAt).toLocaleDateString('es-ES', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                    </Text>
+                </View>
+            </View>
         </View>
     );
 };
 
 // COMPONENTE PRINCIPAL: CommentsScreen
-
 export default function CommentsScreen({ route, navigation }) {
-    // Obtiene el ID del post desde los parámetros de navegación
     const { postId } = route.params;
 
     // ESTADOS
@@ -51,33 +83,58 @@ export default function CommentsScreen({ route, navigation }) {
     // EFECTO: Carga Inicial de Datos 
     useEffect(() => {
         const loadInitialData = async () => {
-            // Obtener ID de usuario para habilitar el envío
-            const userId = await AsyncStorage.getItem("userId");
-            setCurrentUserId(userId);
-            // Cargar la lista de comentarios
-            fetchComments();
+            try {
+                const userId = await AsyncStorage.getItem("userId");
+                console.log("User ID obtenido:", userId);
+                console.log("Post ID:", postId);
+                setCurrentUserId(userId);
+                await fetchComments();
+            } catch (error) {
+                console.error("Error en loadInitialData:", error);
+            }
         };
         loadInitialData();
-    }, []);
+    }, [postId]);
 
     // FUNCIÓN: Obtener Comentarios del Post
     const fetchComments = useCallback(async () => {
         setLoading(true);
         try {
-            // Llama al endpoint de lectura de comentarios
-            const response = await fetch(`${API_BASE_URL}/posts/${postId}/comments`);
+            const url = `${API_BASE_URL}/posts/${postId}/comments`;
+            console.log("Fetching comments from:", url);
+            
+            const response = await fetch(url);
+            console.log("Response status:", response.status);
 
             if (response.ok) {
                 const data = await response.json();
+                console.log("Comentarios recibidos:", data);
                 
-                setComments(data.comments || []); 
+                // Maneja diferentes estructuras de respuesta
+                if (Array.isArray(data)) {
+                    setComments(data);
+                } else if (data.comments && Array.isArray(data.comments)) {
+                    setComments(data.comments);
+                } else {
+                    console.warn("Estructura de respuesta inesperada:", data);
+                    setComments([]);
+                }
             } else {
-                Alert.alert("Error", "No se pudieron cargar los comentarios.");
+                const errorText = await response.text();
+                console.error("Error response:", errorText);
+                Alert.alert(
+                    "Error", 
+                    `No se pudieron cargar los comentarios. Código: ${response.status}`
+                );
                 setComments([]);
             }
         } catch (error) {
             console.error("Error de conexión al obtener comentarios:", error);
-            Alert.alert("Error", "Problema de conexión con el servidor.");
+            Alert.alert(
+                "Error de Conexión", 
+                "No se pudo conectar con el servidor. Verifica que el backend esté corriendo."
+            );
+            setComments([]);
         } finally {
             setLoading(false);
         }
@@ -85,11 +142,11 @@ export default function CommentsScreen({ route, navigation }) {
 
     // FUNCIÓN: Enviar Nuevo Comentario
     const handleSendComment = async () => {
-        // Validación de Sesión y Contenido
         if (!currentUserId) {
             Alert.alert("Error", "Debes iniciar sesión para comentar.");
             return;
         }
+        
         if (newComment.trim().length === 0) {
             Alert.alert("Atención", "El comentario no puede estar vacío.");
             return;
@@ -98,30 +155,44 @@ export default function CommentsScreen({ route, navigation }) {
         setIsSending(true);
         
         try {
-            // Llama al endpoint POST para crear el comentario
-            const response = await fetch(`${API_BASE_URL}/posts/${postId}/comments`, {
+            const url = `${API_BASE_URL}/posts/${postId}/comments`;
+            console.log("Enviando comentario a:", url);
+            
+            const body = {
+                userId: currentUserId,
+                content: newComment.trim(),
+            };
+            console.log("Body:", body);
+
+            const response = await fetch(url, {
                 method: "POST",
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    userId: currentUserId,
-                    content: newComment.trim(),
-                }),
+                body: JSON.stringify(body),
             });
+
+            console.log("Response status:", response.status);
 
             if (response.ok) {
                 const data = await response.json();
-                // Limpiar input y dar feedback
+                console.log("Comentario creado:", data);
+                
                 Alert.alert("Éxito", "Comentario publicado.");
                 setNewComment('');
                 
-                // Actualización optimista: Añadir el nuevo comentario
-                setComments(prevComments => [...prevComments, data.newComment]); 
-
+                // Actualización optimista
+                if (data.newComment) {
+                    setComments(prevComments => [...prevComments, data.newComment]);
+                } else if (data.comment) {
+                    setComments(prevComments => [...prevComments, data.comment]);
+                } else {
+                    // Si no viene el comentario en la respuesta, recarga todos
+                    await fetchComments();
+                }
             } else {
-                // Manejo de errores de servidor
                 const errorData = await response.json().catch(() => ({}));
+                console.error("Error data:", errorData);
                 Alert.alert("Error", errorData.error || "Error al enviar el comentario.");
             }
         } catch (error) {
@@ -132,7 +203,6 @@ export default function CommentsScreen({ route, navigation }) {
         }
     };
 
-    // RENDERIZADO: Estructura de la Pantalla
     return (
         <View style={styles.container}>
             {/* Encabezado Fijo */}
@@ -146,27 +216,25 @@ export default function CommentsScreen({ route, navigation }) {
             {/* Manejo de Teclado */}
             <KeyboardAvoidingView 
                 style={styles.content}
-                // Ajuste específico por plataforma para el teclado
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
             >
                 {loading ? (
-                    // Indicador de carga de comentarios
                     <ActivityIndicator size="large" color="#00aaff" style={styles.loading} />
                 ) : (
-                    // Lista de comentarios
                     <FlatList
                         data={comments}
-                        keyExtractor={(item, index) => item.id ? item.id.toString() : index.toString()}
+                        keyExtractor={(item, index) => 
+                            item.id ? item.id.toString() : `comment-${index}`
+                        }
                         renderItem={({ item }) => <CommentItem comment={item} />}
                         contentContainerStyle={[
                             styles.listContent,
-                            // Asegura que el contenedor ocupe todo el espacio si está vacío
                             comments.length === 0 && styles.listContentEmpty
                         ]}
                         ListEmptyComponent={() => (
-                            // Mensaje si no hay comentarios
                             <View style={styles.emptyContainer}>
+                                <Ionicons name="chatbubble-outline" size={60} color="#555" />
                                 <Text style={styles.emptyText}>
                                     ¡Sé el primero en comentar!
                                 </Text>
@@ -189,7 +257,6 @@ export default function CommentsScreen({ route, navigation }) {
                     <TouchableOpacity 
                         style={[
                             styles.sendButton, 
-                            // Deshabilita el botón si el texto está vacío o si se está enviando
                             (newComment.trim().length === 0 || isSending) && styles.sendButtonDisabled
                         ]}
                         onPress={handleSendComment}
@@ -208,7 +275,6 @@ export default function CommentsScreen({ route, navigation }) {
 }
 
 // ESTILOS
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -259,6 +325,7 @@ const styles = StyleSheet.create({
         color: '#eee',
         fontSize: 16,
         textAlign: 'center',
+        marginTop: 15,
     },
     inputContainer: {
         flexDirection: 'row',
@@ -271,7 +338,7 @@ const styles = StyleSheet.create({
     commentInput: {
         flex: 1,
         minHeight: 40,
-        maxHeight: 100, // Límite de altura para el multiline
+        maxHeight: 100,
         backgroundColor: '#222',
         borderRadius: 20,
         paddingHorizontal: 15,
@@ -294,30 +361,51 @@ const styles = StyleSheet.create({
     },
 });
 
-// Estilos del Comentario Individual 
 const commentStyles = StyleSheet.create({
     commentContainer: {
         backgroundColor: '#1a1a1a',
         padding: 10,
         borderRadius: 8,
         marginBottom: 8,
-        borderLeftWidth: 3,
-        borderLeftColor: '#ff0000',
+    },
+    commentHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    avatarContainer: {
+        marginRight: 10,
+    },
+    avatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#333',
+    },
+    avatarPlaceholder: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#333',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    commentContent: {
+        flex: 1,
     },
     authorUsername: {
-        color: '#ff0000',
+        color: '#00aaff',
         fontWeight: 'bold',
         fontSize: 14,
         marginBottom: 4,
     },
-    commentContent: {
+    commentText: {
         color: '#eee',
         fontSize: 16,
+        lineHeight: 22,
     },
     commentDate: {
         color: '#888',
         fontSize: 11,
         marginTop: 5,
-        textAlign: 'right',
     },
 });

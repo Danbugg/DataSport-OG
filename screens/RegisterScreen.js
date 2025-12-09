@@ -246,6 +246,7 @@ export default function RegisterScreen({ navigation }) {
               <Text style={styles.subtitle}>
                 ¿Ya tienes cuenta?{" "}
                 <Text
+                  testID="login-link"
                   style={styles.link}
                   onPress={() => navigation.navigate("LoginScreen")}
                 >
@@ -254,6 +255,7 @@ export default function RegisterScreen({ navigation }) {
               </Text>
 
               <TextInput
+                testID="register-nombre-input"
                 style={styles.input}
                 placeholder="Nombre *"
                 placeholderTextColor="#555555ff"
@@ -261,13 +263,18 @@ export default function RegisterScreen({ navigation }) {
                 onChangeText={setNombre}
               />
               <TextInput
+                testID="register-apellido-input"
                 style={styles.input}
                 placeholder="Apellido *"
                 placeholderTextColor="#555555ff"
                 value={apellido}
                 onChangeText={setApellido}
               />
-              <TouchableOpacity style={styles.input} onPress={showDatePicker}>
+              <TouchableOpacity 
+                testID="register-fecha-button"
+                style={styles.input} 
+                onPress={showDatePicker}
+              >
                 <Text style={{ color: fechaNacimiento ? "#000" : "#555" }}>
                   {fechaNacimiento || "Fecha de nacimiento (AAAA-MM-DD) *"}
                 </Text>
@@ -281,6 +288,7 @@ export default function RegisterScreen({ navigation }) {
               />
 
               <TextInput
+                testID="register-email-input"
                 style={styles.input}
                 placeholder="Email *"
                 placeholderTextColor="#555555ff"
@@ -290,6 +298,7 @@ export default function RegisterScreen({ navigation }) {
                 autoCapitalize="none"
               />
               <TextInput
+                testID="register-usuario-input"
                 style={styles.input}
                 placeholder="Nombre de usuario *"
                 placeholderTextColor="#555555ff"
@@ -300,6 +309,7 @@ export default function RegisterScreen({ navigation }) {
 
               <View style={styles.passwordContainer}>
                 <TextInput
+                  testID="register-password-input"
                   style={[styles.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]}
                   placeholder="Password *"
                   placeholderTextColor="#555555ff"
@@ -308,6 +318,7 @@ export default function RegisterScreen({ navigation }) {
                   onChangeText={handlePasswordChange}
                 />
                 <TouchableOpacity
+                  testID="register-toggle-password-button"
                   onPress={() => setShowPassword(!showPassword)}
                   style={styles.eyeButton}
                 >
@@ -323,6 +334,7 @@ export default function RegisterScreen({ navigation }) {
               ) : null}
 
               <TouchableOpacity
+                testID="register-button"
                 style={[styles.button, loading && { opacity: 0.7 }]}
                 onPress={handleRegister}
                 disabled={loading}

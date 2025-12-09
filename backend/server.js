@@ -585,6 +585,8 @@ app.put("/profile/:userId", upload.single('profileImage'), async (req, res) => {
 
 // 📣 PUBLICACIONES 
 
+
+
 // Obtener contadores de Likes y Comentarios
 const getPostMetrics = async (postId, currentUserId) => {
     const numericUserId = safeParseInt(currentUserId);
@@ -949,6 +951,52 @@ app.delete("/posts/:postId/like", async (req, res) => {
     } catch (error) {
         console.error('Error al eliminar like:', error);
         res.status(500).json({ error: "Error interno del servidor al eliminar like." });
+    }
+});
+
+// GET: Obtener Comentarios de una Publicación
+app.get("/posts/:postId/comments", async (req, res) => {
+    const { postId } = req.params;
+
+    if (!postId || isNaN(postId)) {
+        return res.status(400).json({ error: "ID de publicación inválido." });
+    }
+
+    try {
+        const sqlQuery = `
+            SELECT
+                c.id,
+                c.content,
+                c.created_at AS "createdAt",
+                c.user_id AS "userId",
+                u.nombre_usuario AS "authorUsername",
+                u.foto_perfil AS "authorProfilePic"
+            FROM comentarios c
+            JOIN usuarios u ON c.user_id = u.id_usuario
+            WHERE c.post_id = $1
+            ORDER BY c.created_at ASC;
+        `;
+        
+        const result = await pool.query(sqlQuery, [postId]);
+        
+        // Corregir URLs de fotos de perfil
+        const comments = result.rows.map(comment => {
+            let authorProfilePicUrl = comment.authorProfilePic;
+            if (authorProfilePicUrl && !authorProfilePicUrl.startsWith('http')) {
+                authorProfilePicUrl = `http://${HOST_IP}:${PORT}/uploads/${path.basename(authorProfilePicUrl)}`;
+            }
+            
+            return {
+                ...comment,
+                authorProfilePic: authorProfilePicUrl || null
+            };
+        });
+
+        res.status(200).json({ comments });
+
+    } catch (error) {
+        console.error(`Error al obtener comentarios del post ${postId}:`, error);
+        res.status(500).json({ error: "Error interno del servidor al cargar comentarios." });
     }
 });
 

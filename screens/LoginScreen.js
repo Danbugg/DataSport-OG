@@ -270,6 +270,7 @@ export default function LoginScreen({ navigation }) {
                 <Text style={styles.subtitle}>Infórmate de tus equipos favoritos</Text>
 
                 <TextInput
+                  testID="email-input"
                   style={styles.input}
                   placeholder="Correo"
                   value={email}
@@ -280,6 +281,7 @@ export default function LoginScreen({ navigation }) {
 
                 <View style={styles.passwordContainer}>
                   <TextInput
+                    testID="password-input"
                     style={[styles.input, { flex: 1, marginBottom: 0 }]}
                     placeholder="Contraseña"
                     secureTextEntry={!showPassword}
@@ -287,6 +289,7 @@ export default function LoginScreen({ navigation }) {
                     onChangeText={setPassword}
                   />
                   <TouchableOpacity
+                    testID="toggle-password-button"
                     onPress={() => setShowPassword(!showPassword)}
                     style={styles.eyeButton}
                   >
@@ -299,6 +302,7 @@ export default function LoginScreen({ navigation }) {
                 </View>
 
                 <TouchableOpacity
+                  testID="login-button"
                   style={[styles.button, loading && { opacity: 0.7 }]}
                   onPress={handleLogin}
                   disabled={loading}
@@ -311,6 +315,7 @@ export default function LoginScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
+                  testID="forgot-password-button"
                   style={styles.forgotPasswordButton}
                   onPress={() => navigation.navigate("OlvidarContraScreen")}
                 >
@@ -320,6 +325,7 @@ export default function LoginScreen({ navigation }) {
                 <Text style={{ marginTop: 15, color: "#fff" }}>
                   ¿No tienes cuenta?{" "}
                   <Text
+                    testID="register-link"
                     style={styles.link}
                     onPress={() => navigation.navigate("RegisterScreen")}
                   >
